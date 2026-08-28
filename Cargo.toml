@@ -52,7 +52,7 @@ tiny_http = "0.12"
 
 # ── Embedded substrate (per R4 §2) ─────────────────────────────────────────
 rusqlite = { version = "0.31", features = ["bundled", "serde_json"] }
-refinery = { version = "0.8", features = ["rusqlite"] }
+refinery = { version = "0.9", features = ["rusqlite"] }
 
 # ── Filesystem walking + change detection ──────────────────────────────────
 ignore = "0.4"
