@@ -39,6 +39,23 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-
 
+      # `g8 scan` and the ast_grep_* backends shell out to `ast-grep`, and
+      # `rg_match_count` to ripgrep. tests/cli.rs drives the real binary, so
+      # without these the CLI tests fail on a missing tool rather than on a
+      # real regression. The npm build of ast-grep is a prebuilt binary, so
+      # this costs seconds where `cargo install` costs minutes.
+      - name: Install checker tools (ripgrep, ast-grep)
+        shell: bash
+        run: |
+          npm install -g @ast-grep/cli
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            sudo apt-get update && sudo apt-get install -y ripgrep
+          else
+            brew install ripgrep || true
+          fi
+          ast-grep --version
+          rg --version
+
       - name: cargo check
         run: cargo check --workspace
 
