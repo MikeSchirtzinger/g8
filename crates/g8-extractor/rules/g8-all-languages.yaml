@@ -1,0 +1,58 @@
+# G8 annotation detection rules for ast-grep.
+#
+# All rules target the magic-comment grammar: `// @g8.<kind>(...)`.
+# Per SPEC Decision 1, only magic-comment annotations are supported in v0.1;
+# native Rust attribute parsing is v0.2 work.
+#
+# Languages covered: Rust, TypeScript, TSX, Python, Go.
+# Python accepts BOTH `# @g8.<kind>(...)` (Python-native) and
+# `// @g8.<kind>(...)` (uniform); both forms are matched by the same
+# `comment` node kind rule (Python tree-sitter uses `comment` for `#`-prefixed lines).
+
+id: g8-rust-magic-comment
+language: rust
+rule:
+  kind: line_comment
+  regex: "@(g8|govern)\\.(capability|intent|convergence_test|decision|plan)"
+message: "G8 magic-comment annotation (Rust)"
+severity: hint
+
+---
+
+id: g8-ts-magic-comment
+language: typescript
+rule:
+  kind: comment
+  regex: "@(g8|govern)\\.(capability|intent|convergence_test|decision|plan)"
+message: "G8 magic-comment annotation (TypeScript)"
+severity: hint
+
+---
+
+id: g8-tsx-magic-comment
+language: tsx
+rule:
+  kind: comment
+  regex: "@(g8|govern)\\.(capability|intent|convergence_test|decision|plan)"
+message: "G8 magic-comment annotation (TSX)"
+severity: hint
+
+---
+
+id: g8-python-magic-comment
+language: python
+rule:
+  kind: comment
+  regex: "@(g8|govern)\\.(capability|intent|convergence_test|decision|plan)"
+message: "G8 magic-comment annotation (Python — accepts both # and // prefix)"
+severity: hint
+
+---
+
+id: g8-go-magic-comment
+language: go
+rule:
+  kind: comment
+  regex: "@(g8|govern)\\.(capability|intent|convergence_test|decision|plan)"
+message: "G8 magic-comment annotation (Go)"
+severity: hint

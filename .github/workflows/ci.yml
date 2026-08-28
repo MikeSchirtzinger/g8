@@ -1,0 +1,126 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  check:
+    name: Check (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install stable Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: cargo check
+        run: cargo check --workspace
+
+      - name: cargo test
+        run: cargo test --workspace
+
+      - name: cargo clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: cargo fmt
+        run: cargo fmt --check
+
+      # The serve feature is off by default, so the steps above never
+      # compile or test it — these two keep the hardened opt-in config
+      # honest continuously, not just in one session's manual run.
+      - name: cargo test (serve feature)
+        run: cargo test -p g8 --features serve --test serve
+
+      - name: cargo clippy (serve feature)
+        run: cargo clippy -p g8 --features serve --all-targets -- -D warnings
+
+  obligations:
+    # The full 27-obligation self-audit against the real artifact. This is
+    # the release gate the #[ignore]d test embodies — named here so its
+    # status is independently visible, never silently skipped (the default
+    # `cargo test` run excludes it by design: OBL-D7-01 triggers real
+    # cargo builds of both feature configs).
+    name: Obligations self-audit (real artifact, 27 checks)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install stable Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-obligations-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-obligations-
+            ${{ runner.os }}-cargo-
+
+      # Several checker backends shell out to real tools (contract §0):
+      # rg for RgMatchCount, ast-grep for the AST backends. Without them
+      # those obligations resolve to status=error — a red gate, but not the
+      # 27/27-passed proof this job exists to pin.
+      - name: Install checker tools (ripgrep, ast-grep)
+        run: |
+          sudo apt-get update && sudo apt-get install -y ripgrep
+          cargo install ast-grep --locked
+
+      - name: Run the full real-artifact obligations test
+        run: cargo test -p g8 --test obligations_check -- --ignored --nocapture
+
+  msrv:
+    name: MSRV (1.78)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust 1.78 (MSRV)
+        uses: dtolnay/rust-toolchain@1.78
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-msrv-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-msrv-
+
+      - name: cargo check --locked (MSRV gate)
+        run: cargo check --workspace --locked

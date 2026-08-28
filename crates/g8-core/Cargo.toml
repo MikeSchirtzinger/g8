@@ -1,0 +1,22 @@
+[package]
+name = "g8-core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+documentation = "https://docs.rs/g8-core"
+readme = "README.md"
+description = "Canonical data model types for G8 (pure data + serde, no I/O)"
+keywords = ["agent", "convergence", "data-model", "serde", "developer-tools"]
+categories = ["development-tools"]
+
+[dependencies]
+serde     = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+chrono    = { workspace = true }
+sha2      = { workspace = true }
+tracing   = { workspace = true }

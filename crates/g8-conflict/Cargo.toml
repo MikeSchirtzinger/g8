@@ -1,0 +1,25 @@
+[package]
+name = "g8-conflict"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+documentation = "https://docs.rs/g8-conflict"
+readme = "README.md"
+description = "Cross-project intent/capability overlap detection for G8"
+keywords = ["agent", "conflict", "convergence", "monorepo", "developer-tools"]
+categories = ["development-tools"]
+
+[dependencies]
+g8-core   = { workspace = true }
+g8-store  = { workspace = true }
+serde      = { workspace = true }
+serde_json = { workspace = true }
+thiserror  = { workspace = true }
+tracing    = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }

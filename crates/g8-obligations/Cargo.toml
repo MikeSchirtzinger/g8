@@ -1,0 +1,49 @@
+[package]
+name = "g8-obligations"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+documentation = "https://docs.rs/g8-obligations"
+readme = "README.md"
+description = "Typed obligation-checker backends for `g8 check`: closed enum, no raw shell strings"
+keywords = ["agent", "convergence", "obligations", "checker", "developer-tools"]
+categories = ["development-tools"]
+
+[dependencies]
+g8-core   = { workspace = true }
+g8-store  = { workspace = true }
+serde      = { workspace = true }
+serde_json = { workspace = true }
+thiserror  = { workspace = true }
+tracing    = { workspace = true }
+sha2       = { workspace = true }
+
+# Glob-scoped file walking for AstGrep*/BuiltinAlgorithm backends (respects
+# .gitignore, same crate g8-extractor already uses for its own directory walk).
+ignore     = { workspace = true }
+# In-process regex matching for DepMatcher::Regex and vocabulary-drift name
+# extraction. NOT used to build shell strings — `rg`'s own regex engine
+# handles RgMatchCount; this is for matching already-materialized Rust strings.
+regex      = { workspace = true }
+
+# OBL-N8-01's `SecondConnectionErrsAfterTimeout` assertion needs raw
+# connection-level control (hold an uncommitted write transaction on one
+# connection, observe a second connection's write genuinely fail under
+# WAL+busy_timeout) that `g8_store::StoreConnection`'s trait API doesn't
+# expose — every method there completes its own transaction. Already a
+# workspace dependency (g8-store, g8); reused directly here rather than
+# faking this assertion's outcome.
+rusqlite   = { workspace = true }
+
+[dev-dependencies]
+tracing-subscriber = { workspace = true }
+# Test-only (matches how g8-extractor/g8 already use it). Production
+# code (FixtureIntegrationTest/ByteDiffTwice's real scratch fixtures) uses
+# `crate::scratch::ScratchDir` instead — NOT this crate — specifically so
+# `tempfile`'s `getrandom` dependency (via `fastrand`) never enters the
+# production `g8` binary's dependency tree; see `src/scratch.rs`.
+tempfile   = { workspace = true }

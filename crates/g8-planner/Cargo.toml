@@ -1,0 +1,22 @@
+[package]
+name = "g8-planner"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+documentation = "https://docs.rs/g8-planner"
+readme = "README.md"
+description = "Composite-query orchestration and deterministic recommendation derivation for G8 planning"
+keywords = ["agent", "planner", "convergence", "deterministic", "developer-tools"]
+categories = ["development-tools"]
+
+[dependencies]
+g8-core  = { workspace = true }
+g8-store = { workspace = true }
+serde     = { workspace = true }
+serde_json = { workspace = true }
+thiserror  = { workspace = true }
+tracing    = { workspace = true }

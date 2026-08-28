@@ -1,0 +1,23 @@
+{
+  "meta": {
+    "run_id": "standing-agent-run-0007",
+    "agent": "content-ops-agent",
+    "git_head": "a1b2c3d4"
+  },
+  "actions": [
+    {
+      "kind": "publish",
+      "target": { "domain": "example.com" },
+      "source_ref": "docs/weekly-digest.md"
+    },
+    {
+      "kind": "publish",
+      "target": { "domain": "docs.example.com" },
+      "source_ref": "docs/changelog.md"
+    },
+    { "kind": "spend", "amount": 120.0, "note": "sponsored post boost" },
+    { "kind": "spend", "amount": 75.5, "note": "image generation credits" },
+    { "kind": "post", "risky": false },
+    { "kind": "post", "risky": true, "escalate": true }
+  ]
+}

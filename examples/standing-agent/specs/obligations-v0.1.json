@@ -1,0 +1,199 @@
+{
+  "meta": {
+    "artifact": "standing-agent-example",
+    "version": "0.1.0",
+    "description": "Five action-receipt obligations for a hypothetical 'content-ops' standing agent. Demonstrates the receipt_query backend's canonical patterns: provenance, allowlist, spend cap, rate cap, and an advisory escalation-marking gate. See ../README.md for the walkthrough."
+  },
+  "obligations": [
+    {
+      "id": "OBL-PROVENANCE-01",
+      "descends_from": {
+        "decision": "provenance",
+        "title": "Every publish action must cite its source.",
+        "why": "A standing agent that can publish without a traceable source_ref can launder ungrounded claims as published content.",
+        "why_kind": "statement_only"
+      },
+      "rule": {
+        "kind": "receipt_gate",
+        "params": {
+          "description": "Zero publish actions may be missing source_ref."
+        }
+      },
+      "checker": {
+        "mode": "typed",
+        "checks": [
+          {
+            "backend": "receipt_query",
+            "args": {
+              "select": "$.actions[*]",
+              "where": [
+                { "path": "$.kind", "op": "eq", "value": "publish" },
+                { "path": "$.source_ref", "op": "absent" }
+              ],
+              "aggregate": { "kind": "count" },
+              "expected": { "kind": "zero" }
+            }
+          }
+        ]
+      },
+      "signal": {
+        "gate": "standing-agent-example",
+        "conflict_kind": null,
+        "wiring": "action_receipt",
+        "advisory": false
+      }
+    },
+    {
+      "id": "OBL-ALLOWLIST-01",
+      "descends_from": {
+        "decision": "allowlist",
+        "title": "Publish targets are restricted to owned domains.",
+        "why": "An agent that can publish to an arbitrary domain can be redirected to publish anywhere, including domains the operator does not control.",
+        "why_kind": "statement_only"
+      },
+      "rule": {
+        "kind": "receipt_gate",
+        "params": {
+          "description": "Zero publish actions may target a domain outside the owned allowlist."
+        }
+      },
+      "checker": {
+        "mode": "typed",
+        "checks": [
+          {
+            "backend": "receipt_query",
+            "args": {
+              "select": "$.actions[*]",
+              "where": [
+                { "path": "$.kind", "op": "eq", "value": "publish" },
+                {
+                  "path": "$.target.domain",
+                  "op": "not_in",
+                  "value": ["example.com", "docs.example.com"]
+                }
+              ],
+              "aggregate": { "kind": "count" },
+              "expected": { "kind": "zero" }
+            }
+          }
+        ]
+      },
+      "signal": {
+        "gate": "standing-agent-example",
+        "conflict_kind": null,
+        "wiring": "action_receipt",
+        "advisory": false
+      }
+    },
+    {
+      "id": "OBL-SPENDCAP-01",
+      "descends_from": {
+        "decision": "spend-cap",
+        "title": "Per-run spend is bounded.",
+        "why": "An agent operating unwatched must have a hard ceiling on what it can spend in one run, independent of any per-action limit.",
+        "why_kind": "statement_only"
+      },
+      "rule": {
+        "kind": "receipt_gate",
+        "params": {
+          "description": "Total spend across the run must not exceed 500."
+        }
+      },
+      "checker": {
+        "mode": "typed",
+        "checks": [
+          {
+            "backend": "receipt_query",
+            "args": {
+              "select": "$.actions[*]",
+              "where": [{ "path": "$.kind", "op": "eq", "value": "spend" }],
+              "aggregate": { "kind": "sum", "path": "$.amount" },
+              "expected": { "kind": "at_most", "value": 500.0 }
+            }
+          }
+        ]
+      },
+      "signal": {
+        "gate": "standing-agent-example",
+        "conflict_kind": null,
+        "wiring": "action_receipt",
+        "advisory": false
+      }
+    },
+    {
+      "id": "OBL-RATECAP-01",
+      "descends_from": {
+        "decision": "rate-cap",
+        "title": "Per-run public-post volume is bounded.",
+        "why": "Rate-limiting public posts per run bounds the blast radius of a single bad run, independent of any per-post content check.",
+        "why_kind": "statement_only"
+      },
+      "rule": {
+        "kind": "receipt_gate",
+        "params": {
+          "description": "At most 3 post actions per run."
+        }
+      },
+      "checker": {
+        "mode": "typed",
+        "checks": [
+          {
+            "backend": "receipt_query",
+            "args": {
+              "select": "$.actions[*]",
+              "where": [{ "path": "$.kind", "op": "eq", "value": "post" }],
+              "aggregate": { "kind": "count" },
+              "expected": { "kind": "at_most", "value": 3.0 }
+            }
+          }
+        ]
+      },
+      "signal": {
+        "gate": "standing-agent-example",
+        "conflict_kind": null,
+        "wiring": "action_receipt",
+        "advisory": false
+      }
+    },
+    {
+      "id": "OBL-ESCALATION-01",
+      "descends_from": {
+        "decision": "escalation-marking",
+        "title": "Risky actions must be marked for human review.",
+        "why": "Escalation is queue-and-continue, not block-and-wait (spec: 'a decision inbox'): a risky action isn't forbidden, but it must be marked so a human can review it out of band. Advisory: it must be visible, never blocking.",
+        "why_kind": "statement_only"
+      },
+      "rule": {
+        "kind": "receipt_gate",
+        "params": {
+          "description": "Zero actions marked risky may be missing escalate: true."
+        }
+      },
+      "checker": {
+        "mode": "typed",
+        "checks": [
+          {
+            "backend": "receipt_query",
+            "args": {
+              "select": "$.actions[*]",
+              "where": [
+                { "path": "$.risky", "op": "eq", "value": true },
+                { "path": "$.escalate", "op": "ne", "value": true }
+              ],
+              "aggregate": { "kind": "count" },
+              "expected": { "kind": "zero" }
+            }
+          }
+        ]
+      },
+      "signal": {
+        "gate": "standing-agent-example",
+        "conflict_kind": null,
+        "wiring": "action_receipt",
+        "advisory": true
+      }
+    }
+  ],
+  "conflicts": [],
+  "open_questions": []
+}

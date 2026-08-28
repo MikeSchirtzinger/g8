@@ -1,0 +1,27 @@
+# Rust build artifacts
+target/
+**/*.rs.bk
+Cargo.lock.bak
+
+# g8 local substrate (each repo using g8 will have its own .g8/; we don't
+# want this repo accidentally tracking a development store). .govern/ is the
+# pre-rename directory name, still accepted by the binary.
+.g8/store.db
+.g8/store.db-wal
+.g8/store.db-shm
+.g8/store.db-journal
+.g8/INTENT_SUMMARY.md
+.govern/
+
+# Editor / OS
+*.swp
+*.swo
+.DS_Store
+.idea/
+.vscode/
+
+# Local agent scratchpads
+/scratch/
+
+# Pre-git tarball snapshots (superseded by git history itself)
+/.backup-*/

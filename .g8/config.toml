@@ -1,0 +1,9 @@
+[g8]
+version = "0.1.0"
+enforcement = "off"
+project_name = "g8"
+space_id = "HMYjm8CZqUzY67_URiWeU"
+
+[extractor]
+
+[ui]

@@ -1,0 +1,30 @@
+# G8 ConvergenceSpace for the multi-repo-space demo.
+#
+# This space federates two projects (repoA and repoB) that are about to be
+# merged.  Running `g8 merge --from repoB --into repoA` from the repoA
+# directory will detect the capability-name collision on "http-fetch" and the
+# duplicate intent on the "auth" substrate.
+#
+# The collision is intentional — it's the primary demo for `g8 merge`.
+
+[space]
+name = "platform-demo"
+description = "Demo multi-repo space: two services sharing the 'http-fetch' name"
+
+[[members]]
+name = "repoA"
+root = "./repoA"
+
+[[members]]
+name = "repoB"
+root = "./repoB"
+
+[substrate_budgets]
+# Both repos contribute Plans to the auth substrate; cap is deliberately low
+# to demo a WIP-cap warning when a new plan tries to dispatch.
+"auth" = 2
+"http-layer" = 3
+
+[links]
+# No aliases declared — the http-fetch collision in both repos WILL be reported
+# as CapabilityNameCollision (Error severity) by `g8 merge`.

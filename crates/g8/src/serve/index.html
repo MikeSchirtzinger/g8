@@ -1,0 +1,947 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>g8 — convergence dashboard</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0e0f12;--panel:#15171c;--panel2:#1b1e25;
+  --text:#e6e8ee;--muted:#8b91a1;--border:#262a33;--accent:#8be9fd;
+  --c-idea:#6272a4;--c-scoped:#8be9fd;--c-dispatched:#50fa7b;
+  --c-blocked:#ff5555;--c-done:#44475a;--c-parked:#ffb86c;
+  --k-capability:#2dd4bf;--k-intent:#bd93f9;--k-decision:#ffb86c;
+  --k-substrate:#f8f8f2;--k-project:#7f8ea3;--k-plan:#8be9fd;
+  --sidebar:300px;--rpanel:320px;
+  --ff:-apple-system,BlinkMacSystemFont,system-ui,sans-serif;
+  --ffm:"SF Mono","Fira Code","Cascadia Code",ui-monospace,monospace;
+}
+html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);font-family:var(--ff);font-size:13px;line-height:1.5}
+a{color:var(--accent);text-decoration:none}
+button{cursor:pointer;font-family:var(--ff);font-size:12px;border:1px solid var(--border);background:var(--panel2);color:var(--text);border-radius:4px;padding:4px 10px;transition:background .15s,border-color .15s}
+button:hover{background:var(--border);border-color:var(--accent)}
+button.primary{background:var(--accent);color:#0e0f12;border-color:var(--accent);font-weight:600}
+button.primary:hover{background:#5dd6f0}
+button.danger{border-color:var(--c-blocked);color:var(--c-blocked)}
+button.danger:hover{background:rgba(255,85,85,.15)}
+input,select,textarea{background:var(--bg);border:1px solid var(--border);color:var(--text);font-family:var(--ff);font-size:12px;border-radius:4px;padding:5px 8px;width:100%;outline:none;transition:border-color .15s}
+input:focus,select:focus,textarea:focus{border-color:var(--accent)}
+textarea{resize:vertical;min-height:52px}
+label{display:block;color:var(--muted);font-size:11px;margin-bottom:3px}
+.field{margin-bottom:10px}
+
+/* layout */
+#app{display:flex;height:100%;flex-direction:column}
+#topbar{flex:0 0 auto;display:flex;align-items:center;justify-content:space-between;padding:0 16px;height:44px;background:var(--panel);border-bottom:1px solid var(--border);z-index:10;gap:12px}
+#topbar-left{display:flex;align-items:center;gap:10px}
+#wordmark{font-size:16px;font-weight:700;letter-spacing:-.5px;color:var(--text);font-family:var(--ffm)}
+#wordmark span{color:var(--accent)}
+#space-name{color:var(--muted);font-size:12px;font-family:var(--ffm)}
+#live-dot{width:8px;height:8px;border-radius:50%;background:#50fa7b;flex-shrink:0;box-shadow:0 0 6px #50fa7b80;transition:background .3s,box-shadow .3s}
+#live-dot.amber{background:#ffb86c;box-shadow:0 0 6px #ffb86c80}
+#live-dot.red{background:#ff5555;box-shadow:0 0 6px #ff555580}
+#topbar-right{display:flex;align-items:center;gap:8px}
+
+#body{display:flex;flex:1;overflow:hidden}
+#sidebar{width:var(--sidebar);flex:0 0 var(--sidebar);background:var(--panel);border-right:1px solid var(--border);overflow-y:auto;overflow-x:hidden;padding:12px}
+#sidebar::-webkit-scrollbar{width:4px}
+#sidebar::-webkit-scrollbar-track{background:transparent}
+#sidebar::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+
+#canvas-wrap{flex:1;position:relative;overflow:hidden}
+canvas{display:block;width:100%;height:100%}
+#empty-state{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;pointer-events:none;opacity:0;transition:opacity .3s}
+#empty-state.show{opacity:1}
+#empty-state .es-icon{font-size:36px;opacity:.3}
+#empty-state p{color:var(--muted);font-size:13px;text-align:center}
+#empty-state code{font-family:var(--ffm);color:var(--accent);font-size:12px}
+
+#rpanel{width:0;flex:0 0 0;background:var(--panel);border-left:1px solid var(--border);overflow:hidden;transition:width .2s,flex-basis .2s;display:flex;flex-direction:column}
+#rpanel.open{width:var(--rpanel);flex:0 0 var(--rpanel)}
+#rpanel-inner{width:var(--rpanel);flex:1;overflow-y:auto;overflow-x:hidden;padding:14px}
+#rpanel-inner::-webkit-scrollbar{width:4px}
+#rpanel-inner::-webkit-scrollbar-track{background:transparent}
+#rpanel-inner::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+#rpanel-close{position:absolute;top:50px;right:0;width:20px;height:40px;background:var(--border);border:none;border-radius:4px 0 0 4px;color:var(--muted);font-size:16px;display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:5;padding:0}
+#rpanel-close:hover{color:var(--text);background:var(--panel2)}
+
+/* stats */
+.section-title{font-size:10px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:8px;margin-top:4px}
+.stats-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;margin-bottom:10px}
+.stat-box{background:var(--panel2);border:1px solid var(--border);border-radius:5px;padding:6px 8px;text-align:center}
+.stat-num{font-family:var(--ffm);font-size:16px;font-weight:700;color:var(--accent)}
+.stat-label{font-size:10px;color:var(--muted);margin-top:1px}
+.status-chips{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:12px}
+.chip{font-size:10px;font-weight:600;padding:2px 7px;border-radius:10px;border:1px solid transparent;font-family:var(--ffm)}
+
+/* legend */
+.legend{display:flex;flex-direction:column;gap:4px;margin-bottom:12px}
+.legend-row{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--muted)}
+.legend-shape{width:14px;height:14px;flex-shrink:0;display:flex;align-items:center;justify-content:center}
+svg.ls{overflow:visible}
+
+/* filters */
+.filter-row{display:flex;align-items:center;gap:6px;margin-bottom:5px;font-size:12px}
+.filter-row input[type=checkbox]{width:auto;accent-color:var(--accent)}
+.kind-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+
+/* collapsible */
+.collapsible{margin-bottom:10px}
+.coll-header{display:flex;align-items:center;justify-content:space-between;cursor:pointer;padding:5px 0;border-bottom:1px solid var(--border);margin-bottom:8px;user-select:none}
+.coll-header:hover .coll-title{color:var(--text)}
+.coll-title{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);transition:color .15s}
+.coll-arrow{color:var(--muted);font-size:10px;transition:transform .15s}
+.coll-arrow.open{transform:rotate(90deg)}
+.coll-body{display:none}
+.coll-body.open{display:block}
+
+/* detail panel */
+.kind-badge{display:inline-block;font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;padding:2px 8px;border-radius:3px;margin-bottom:10px;font-family:var(--ffm)}
+.detail-label{font-size:10px;color:var(--muted);margin-bottom:2px;margin-top:10px;font-weight:600;text-transform:uppercase;letter-spacing:.06em}
+.detail-value{font-size:12px;color:var(--text);word-break:break-word}
+.detail-value.mono{font-family:var(--ffm);font-size:11px;color:var(--accent)}
+.detail-value.muted{color:var(--muted)}
+.actions-row{display:flex;flex-wrap:wrap;gap:6px;margin-top:14px}
+.detail-node-title{font-size:14px;font-weight:600;margin-bottom:4px;line-height:1.3}
+#rpanel-inner hr{border:none;border-top:1px solid var(--border);margin:12px 0}
+
+/* toasts */
+#toasts{position:fixed;bottom:16px;right:16px;display:flex;flex-direction:column;gap:6px;z-index:9999;pointer-events:none}
+.toast{pointer-events:auto;min-width:240px;max-width:360px;padding:10px 14px;border-radius:6px;font-size:12px;border:1px solid var(--border);background:var(--panel2);color:var(--text);box-shadow:0 4px 16px rgba(0,0,0,.4);opacity:0;transform:translateX(20px);transition:opacity .2s,transform .2s}
+.toast.show{opacity:1;transform:translateX(0)}
+.toast.ok{border-left:3px solid var(--c-dispatched)}
+.toast.err{border-left:3px solid var(--c-blocked)}
+.toast.info{border-left:3px solid var(--accent)}
+
+/* scrollbar global */
+::-webkit-scrollbar{width:4px;height:4px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+
+/* separator */
+.sep{border:none;border-top:1px solid var(--border);margin:10px 0}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="topbar">
+    <div id="topbar-left">
+      <div id="wordmark"><span>g8</span></div>
+      <div id="space-name">loading…</div>
+      <div id="live-dot" title="connecting…"></div>
+    </div>
+    <div id="topbar-right">
+      <button id="btn-download">Download scene</button>
+      <button id="btn-agentviz">Open in AgentViz</button>
+    </div>
+  </div>
+  <div id="body">
+    <div id="sidebar">
+      <div class="section-title">Stats</div>
+      <div class="stats-grid" id="stats-grid">
+        <div class="stat-box"><div class="stat-num" id="s-plans">–</div><div class="stat-label">plans</div></div>
+        <div class="stat-box"><div class="stat-num" id="s-caps">–</div><div class="stat-label">capabilities</div></div>
+        <div class="stat-box"><div class="stat-num" id="s-intents">–</div><div class="stat-label">intents</div></div>
+        <div class="stat-box"><div class="stat-num" id="s-decisions">–</div><div class="stat-label">decisions</div></div>
+        <div class="stat-box"><div class="stat-num" id="s-substrates">–</div><div class="stat-label">substrates</div></div>
+        <div class="stat-box"><div class="stat-num" id="s-projects">–</div><div class="stat-label">projects</div></div>
+      </div>
+      <div class="section-title">Plans by status</div>
+      <div class="status-chips" id="status-chips"></div>
+      <hr class="sep">
+      <div class="section-title">Legend</div>
+      <div class="legend" id="legend">
+        <div class="legend-row"><div class="legend-shape"><svg class="ls" width="14" height="14"><circle cx="7" cy="7" r="6" fill="var(--k-plan)"/></svg></div>plan (by status)</div>
+        <div class="legend-row"><div class="legend-shape"><svg class="ls" width="14" height="14"><polygon points="7,1 13,13 1,13" fill="var(--k-intent)"/></svg></div>intent</div>
+        <div class="legend-row"><div class="legend-shape"><svg class="ls" width="14" height="14"><rect x="2" y="2" width="10" height="10" fill="var(--k-decision)" transform="rotate(45,7,7)"/></svg></div>capability</div>
+        <div class="legend-row"><div class="legend-shape"><svg class="ls" width="14" height="14"><rect x="2" y="2" width="10" height="10" fill="var(--k-decision)"/></svg></div>decision</div>
+        <div class="legend-row"><div class="legend-shape"><svg class="ls" width="14" height="14"><polygon points="7,1 13,5 11,12 3,12 1,5" fill="var(--k-substrate)"/></svg></div>substrate</div>
+        <div class="legend-row"><div class="legend-shape"><svg class="ls" width="14" height="14"><rect x="1" y="1" width="12" height="12" rx="3" fill="var(--k-project)"/></svg></div>project</div>
+      </div>
+      <hr class="sep">
+      <div class="section-title">Filter kinds</div>
+      <div id="filter-kinds" style="margin-bottom:12px"></div>
+      <hr class="sep">
+
+      <div class="collapsible">
+        <div class="coll-header" onclick="toggleColl(this)">
+          <span class="coll-title">New plan</span>
+          <span class="coll-arrow">▶</span>
+        </div>
+        <div class="coll-body">
+          <form id="form-plan" onsubmit="submitPlan(event)">
+            <div class="field"><label>Title *</label><input type="text" id="fp-title" placeholder="short title" required></div>
+            <div class="field"><label>Substrate</label><input type="text" id="fp-substrate" placeholder="auth, billing…"></div>
+            <div class="field"><label>Description</label><textarea id="fp-desc" placeholder="optional description"></textarea></div>
+            <div class="field"><label>Touches (comma-separated IDs)</label><input type="text" id="fp-touches" placeholder="cap:abc, plan:xyz"></div>
+            <div class="field"><label>Mode</label>
+              <select id="fp-mode">
+                <option value="idea">idea</option>
+                <option value="park">park</option>
+                <option value="dispatch">dispatch</option>
+              </select>
+            </div>
+            <button type="submit" class="primary" style="width:100%">Create plan</button>
+          </form>
+        </div>
+      </div>
+
+      <div class="collapsible">
+        <div class="coll-header" onclick="toggleColl(this)">
+          <span class="coll-title">Add substrate</span>
+          <span class="coll-arrow">▶</span>
+        </div>
+        <div class="coll-body">
+          <form id="form-substrate" onsubmit="submitSubstrate(event)">
+            <div class="field"><label>Name *</label><input type="text" id="fs-name" placeholder="auth" required></div>
+            <div class="field"><label>WIP cap</label><input type="number" id="fs-wip" placeholder="3" min="1"></div>
+            <div class="field"><label>Stale days</label><input type="number" id="fs-stale" placeholder="14" min="1"></div>
+            <button type="submit" class="primary" style="width:100%">Add substrate</button>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <div id="canvas-wrap">
+      <canvas id="graph-canvas"></canvas>
+      <div id="empty-state">
+        <div class="es-icon">◎</div>
+        <p>No data yet.</p>
+        <p><code>g8 scan</code> then <code>g8 plan new</code></p>
+      </div>
+    </div>
+
+    <div id="rpanel">
+      <div id="rpanel-inner">
+        <div id="rpanel-content"></div>
+      </div>
+    </div>
+    <button id="rpanel-close" onclick="closeRpanel()" title="Close" style="display:none">✕</button>
+  </div>
+</div>
+<div id="toasts"></div>
+
+<script>
+// ─── Auth ─────────────────────────────────────────────────────────────────────
+// Substituted server-side (see respond_html in serve/mod.rs) with this run's
+// ephemeral token — never present in the URL, so it doesn't end up in shell
+// or browser history. Required on every mutating (POST) request below.
+const TOKEN = "__GOVERN_TOKEN__";
+
+// ─── State ────────────────────────────────────────────────────────────────────
+const S = {
+  graphData: null,       // last fetched graph
+  positions: {},         // id → {x,y,vx,vy,pinned}
+  version: -1,
+  agentVizUrl: 'http://localhost:8090',
+  selectedId: null,
+  hoverId: null,
+  visibleKinds: new Set(['plan','capability','intent','decision','substrate','project']),
+  zoom: 1, panX: 0, panY: 0,
+  drag: null,            // {type:'node'|'pan', id?, startX, startY, origX, origY}
+  simRunning: false,
+  simCooling: 0,
+  raf: null,
+};
+
+// ─── Colors & Shapes ─────────────────────────────────────────────────────────
+const STATUS_COLOR = {
+  Idea:'#6272a4', Scoped:'#8be9fd', Dispatched:'#50fa7b',
+  Blocked:'#ff5555', Done:'#44475a', Parked:'#ffb86c'
+};
+const KIND_COLOR = {
+  plan:'#8be9fd', capability:'#2dd4bf', intent:'#bd93f9',
+  decision:'#ffb86c', substrate:'#f8f8f2', project:'#7f8ea3'
+};
+
+function nodeColor(n) {
+  if (n.kind === 'plan' && n.status) return STATUS_COLOR[n.status] || KIND_COLOR.plan;
+  return KIND_COLOR[n.kind] || '#8b91a1';
+}
+
+function nodeRadius(n) {
+  if (n.kind === 'substrate') return 18;
+  if (n.kind === 'project') return 14;
+  return 10;
+}
+
+// ─── Canvas Setup ────────────────────────────────────────────────────────────
+const canvas = document.getElementById('graph-canvas');
+const ctx = canvas.getContext('2d');
+
+function resizeCanvas() {
+  const wrap = document.getElementById('canvas-wrap');
+  const dpr = window.devicePixelRatio || 1;
+  const w = wrap.clientWidth, h = wrap.clientHeight;
+  canvas.width = w * dpr;
+  canvas.height = h * dpr;
+  canvas.style.width = w + 'px';
+  canvas.style.height = h + 'px';
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  kickSim();
+}
+window.addEventListener('resize', resizeCanvas);
+
+// ─── Force Simulation ─────────────────────────────────────────────────────────
+const SIM = { repulse: 6500, spring: 0.045, springLen: 150, gravity: 0.018, damp: 0.82 };
+
+function ensurePositions(nodes) {
+  const cx = canvas.clientWidth / 2 || 400;
+  const cy = canvas.clientHeight / 2 || 300;
+  for (const n of nodes) {
+    if (!S.positions[n.id]) {
+      const angle = Math.random() * Math.PI * 2;
+      const r = 80 + Math.random() * 200;
+      S.positions[n.id] = { x: cx + Math.cos(angle)*r, y: cy + Math.sin(angle)*r, vx:0, vy:0, pinned:false };
+    }
+  }
+}
+
+function simStep(nodes, edges) {
+  if (!nodes || nodes.length === 0) return;
+  const visible = nodes.filter(n => S.visibleKinds.has(n.kind));
+  const idxById = {};
+  visible.forEach((n,i) => idxById[n.id] = i);
+  const pos = visible.map(n => S.positions[n.id]);
+  const cx = canvas.clientWidth / 2;
+  const cy = canvas.clientHeight / 2;
+  const forces = visible.map(() => ({fx:0,fy:0}));
+
+  // repulsion O(n^2) (fine for <500)
+  for (let i=0; i<visible.length; i++) {
+    for (let j=i+1; j<visible.length; j++) {
+      let dx = pos[i].x - pos[j].x, dy = pos[i].y - pos[j].y;
+      let d2 = dx*dx + dy*dy + 1;
+      let f = SIM.repulse / d2;
+      let d = Math.sqrt(d2);
+      forces[i].fx += f * dx/d; forces[i].fy += f * dy/d;
+      forces[j].fx -= f * dx/d; forces[j].fy -= f * dy/d;
+    }
+  }
+
+  // spring edges
+  const edgeSet = edges || [];
+  for (const e of edgeSet) {
+    const si = idxById[e.source], ti = idxById[e.target];
+    if (si === undefined || ti === undefined) continue;
+    let dx = pos[ti].x - pos[si].x, dy = pos[ti].y - pos[si].y;
+    let d = Math.sqrt(dx*dx+dy*dy) || 1;
+    let f = SIM.spring * (d - SIM.springLen);
+    let fx = f * dx/d, fy = f * dy/d;
+    forces[si].fx += fx; forces[si].fy += fy;
+    forces[ti].fx -= fx; forces[ti].fy -= fy;
+  }
+
+  // gravity to center
+  let totalMovement = 0;
+  for (let i=0; i<visible.length; i++) {
+    const p = pos[i];
+    if (p.pinned) { p.vx=0; p.vy=0; continue; }
+    forces[i].fx += SIM.gravity * (cx - p.x);
+    forces[i].fy += SIM.gravity * (cy - p.y);
+    p.vx = (p.vx + forces[i].fx) * SIM.damp;
+    p.vy = (p.vy + forces[i].fy) * SIM.damp;
+    p.x += p.vx; p.y += p.vy;
+    totalMovement += Math.abs(p.vx) + Math.abs(p.vy);
+  }
+  return totalMovement;
+}
+
+function kickSim() {
+  S.simCooling = 120;
+  if (!S.simRunning) startRenderLoop();
+}
+
+function startRenderLoop() {
+  S.simRunning = true;
+  function frame() {
+    if (!S.graphData) { S.simRunning = false; return; }
+    const nodes = S.graphData.nodes || [];
+    const edges = S.graphData.edges || [];
+    let mv = 0;
+    if (S.simCooling > 0) {
+      mv = simStep(nodes, edges) || 0;
+      S.simCooling--;
+    }
+    render();
+    if (S.simCooling > 0 || mv > 0.5) {
+      S.raf = requestAnimationFrame(frame);
+    } else {
+      S.simRunning = false;
+      if (S.fitPending) { S.fitPending = false; fitView(); render(); }
+    }
+  }
+  S.raf = requestAnimationFrame(frame);
+}
+
+// Frame all visible nodes within the canvas, centered, with padding.
+function fitView() {
+  const nodes = (S.graphData?.nodes || []).filter(n => S.visibleKinds.has(n.kind));
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const n of nodes) {
+    const p = S.positions[n.id];
+    if (!p) continue;
+    const r = nodeRadius(n) + 28;
+    minX = Math.min(minX, p.x - r); minY = Math.min(minY, p.y - r);
+    maxX = Math.max(maxX, p.x + r); maxY = Math.max(maxY, p.y + r);
+  }
+  if (!isFinite(minX)) return;
+  const W = canvas.clientWidth, H = canvas.clientHeight;
+  const bw = Math.max(1, maxX - minX), bh = Math.max(1, maxY - minY);
+  S.zoom = Math.max(0.2, Math.min(2.2, Math.min(W / bw, H / bh) * 0.9));
+  const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2;
+  S.panX = W / 2 - cx * S.zoom;
+  S.panY = H / 2 - cy * S.zoom;
+}
+
+// ─── Rendering ────────────────────────────────────────────────────────────────
+function drawHex(ctx, x, y, r) {
+  ctx.beginPath();
+  for (let i=0; i<6; i++) {
+    const a = Math.PI/180*(60*i - 30);
+    i===0 ? ctx.moveTo(x+r*Math.cos(a),y+r*Math.sin(a)) : ctx.lineTo(x+r*Math.cos(a),y+r*Math.sin(a));
+  }
+  ctx.closePath();
+}
+function drawDiamond(ctx, x, y, r) {
+  ctx.beginPath();
+  ctx.moveTo(x, y-r); ctx.lineTo(x+r, y);
+  ctx.lineTo(x, y+r); ctx.lineTo(x-r, y);
+  ctx.closePath();
+}
+function drawTriangle(ctx, x, y, r) {
+  ctx.beginPath();
+  ctx.moveTo(x, y-r);
+  ctx.lineTo(x+r*0.866, y+r*0.5);
+  ctx.lineTo(x-r*0.866, y+r*0.5);
+  ctx.closePath();
+}
+function drawRoundRect(ctx, x, y, w, h, rad) {
+  ctx.beginPath();
+  ctx.moveTo(x+rad, y);
+  ctx.lineTo(x+w-rad, y); ctx.arcTo(x+w,y,x+w,y+rad,rad);
+  ctx.lineTo(x+w, y+h-rad); ctx.arcTo(x+w,y+h,x+w-rad,y+h,rad);
+  ctx.lineTo(x+rad, y+h); ctx.arcTo(x,y+h,x,y+h-rad,rad);
+  ctx.lineTo(x, y+rad); ctx.arcTo(x,y,x+rad,y,rad);
+  ctx.closePath();
+}
+
+function drawNode(ctx, n, x, y, selected, hovered) {
+  const r = nodeRadius(n);
+  const col = nodeColor(n);
+  const alpha = selected ? 1 : (S.selectedId && !hovered ? 0.4 : 1);
+  ctx.globalAlpha = alpha;
+
+  // glow
+  if (selected || hovered) {
+    ctx.shadowColor = col;
+    ctx.shadowBlur = selected ? 20 : 10;
+  } else {
+    ctx.shadowBlur = 0;
+  }
+
+  ctx.fillStyle = col;
+  ctx.strokeStyle = selected ? '#fff' : col;
+  ctx.lineWidth = selected ? 2 : 0;
+
+  const k = n.kind;
+  if (k === 'plan') { ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.fill(); if(selected) ctx.stroke(); }
+  else if (k === 'capability') { drawDiamond(ctx,x,y,r); ctx.fill(); if(selected) ctx.stroke(); }
+  else if (k === 'intent') { drawTriangle(ctx,x,y,r); ctx.fill(); if(selected) ctx.stroke(); }
+  else if (k === 'decision') { ctx.save(); ctx.translate(x,y); ctx.rotate(Math.PI/4); ctx.fillRect(-r/1.4,-r/1.4,r*1.41,r*1.41); if(selected){ctx.strokeRect(-r/1.4,-r/1.4,r*1.41,r*1.41);} ctx.restore(); }
+  else if (k === 'substrate') { drawHex(ctx,x,y,r); ctx.fill(); if(selected) ctx.stroke(); }
+  else if (k === 'project') { drawRoundRect(ctx,x-r,y-r,r*2,r*2,4); ctx.fill(); if(selected) ctx.stroke(); }
+  else { ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.fill(); }
+
+  ctx.shadowBlur = 0;
+  ctx.globalAlpha = 1;
+}
+
+const EDGE_COLORS = {
+  on:'#3a3f4a', touches:'#3a3f4a', extends:'#50fa7b44', replaces:'#ff555544',
+  conflicts:'#ff555566', satisfies:'#50fa7b44', contradicts:'#ff555544',
+  derived_from:'#bd93f944', governed_by:'#8be9fd44', violates:'#ff555544',
+  supersedes:'#ffb86c44', in:'#26303a'
+};
+
+function render() {
+  const W = canvas.clientWidth, H = canvas.clientHeight;
+  ctx.clearRect(0, 0, W, H);
+  ctx.fillStyle = '#0e0f12';
+  ctx.fillRect(0, 0, W, H);
+
+  if (!S.graphData || !S.graphData.nodes.length) {
+    document.getElementById('empty-state').classList.add('show');
+    return;
+  }
+  document.getElementById('empty-state').classList.remove('show');
+
+  ctx.save();
+  ctx.translate(S.panX, S.panY);
+  ctx.scale(S.zoom, S.zoom);
+
+  const nodes = S.graphData.nodes.filter(n => S.visibleKinds.has(n.kind));
+  const nodeById = {};
+  for (const n of nodes) nodeById[n.id] = n;
+
+  const selectedNeighbors = new Set();
+  if (S.selectedId) {
+    for (const e of (S.graphData.edges||[])) {
+      if (e.source === S.selectedId) selectedNeighbors.add(e.target);
+      if (e.target === S.selectedId) selectedNeighbors.add(e.source);
+    }
+  }
+
+  // edges
+  for (const e of (S.graphData.edges||[])) {
+    const sp = S.positions[e.source], tp = S.positions[e.target];
+    if (!sp || !tp) continue;
+    if (!nodeById[e.source] || !nodeById[e.target]) continue;
+    const isHighlit = S.selectedId && (e.source===S.selectedId||e.target===S.selectedId);
+    ctx.beginPath();
+    ctx.moveTo(sp.x, sp.y); ctx.lineTo(tp.x, tp.y);
+    ctx.strokeStyle = isHighlit ? '#8be9fd66' : (EDGE_COLORS[e.kind]||'#262a33');
+    ctx.lineWidth = isHighlit ? 1.5 : 0.8;
+    ctx.globalAlpha = S.selectedId && !isHighlit ? 0.25 : 0.7;
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+
+  // labels (only when zoomed in enough)
+  const showLabels = S.zoom > 0.4;
+  ctx.font = `11px ${getComputedStyle(document.body).fontFamily}`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'top';
+
+  for (const n of nodes) {
+    const p = S.positions[n.id];
+    if (!p) continue;
+    const sel = S.selectedId === n.id;
+    const hov = S.hoverId === n.id;
+    const isNeighbor = selectedNeighbors.has(n.id);
+    drawNode(ctx, n, p.x, p.y, sel, hov);
+
+    if (showLabels && (sel || hov || isNeighbor || !S.selectedId)) {
+      const r = nodeRadius(n);
+      ctx.globalAlpha = sel ? 1 : (S.selectedId && !isNeighbor ? 0.35 : 0.75);
+      ctx.fillStyle = '#e6e8ee';
+      const maxLen = 22;
+      let lbl = n.label.length > maxLen ? n.label.slice(0,maxLen)+'…' : n.label;
+      ctx.fillText(lbl, p.x, p.y + r + 4);
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  ctx.restore();
+}
+
+// ─── Interaction ──────────────────────────────────────────────────────────────
+function screenToWorld(sx, sy) {
+  return { x: (sx - S.panX) / S.zoom, y: (sy - S.panY) / S.zoom };
+}
+
+function hitTest(wx, wy) {
+  if (!S.graphData) return null;
+  const nodes = S.graphData.nodes.filter(n => S.visibleKinds.has(n.kind));
+  for (let i = nodes.length-1; i >= 0; i--) {
+    const n = nodes[i];
+    const p = S.positions[n.id];
+    if (!p) continue;
+    const r = nodeRadius(n) + 4;
+    if (Math.hypot(wx-p.x, wy-p.y) < r) return n;
+  }
+  return null;
+}
+
+canvas.addEventListener('mousedown', e => {
+  const rect = canvas.getBoundingClientRect();
+  const sx = e.clientX - rect.left, sy = e.clientY - rect.top;
+  const w = screenToWorld(sx, sy);
+  const hit = hitTest(w.x, w.y);
+  if (hit) {
+    S.drag = { type:'node', id:hit.id, startX:sx, startY:sy,
+               origX: S.positions[hit.id].x, origY: S.positions[hit.id].y };
+  } else {
+    S.drag = { type:'pan', startX:sx, startY:sy, origPanX:S.panX, origPanY:S.panY };
+  }
+});
+
+canvas.addEventListener('mousemove', e => {
+  const rect = canvas.getBoundingClientRect();
+  const sx = e.clientX - rect.left, sy = e.clientY - rect.top;
+  if (S.drag) {
+    const dx = sx - S.drag.startX, dy = sy - S.drag.startY;
+    if (S.drag.type === 'node') {
+      const p = S.positions[S.drag.id];
+      p.x = S.drag.origX + dx/S.zoom;
+      p.y = S.drag.origY + dy/S.zoom;
+      p.pinned = true;
+      kickSim();
+    } else {
+      S.panX = S.drag.origPanX + dx;
+      S.panY = S.drag.origPanY + dy;
+      if (!S.simRunning) render();
+    }
+    return;
+  }
+  const w = screenToWorld(sx, sy);
+  const hit = hitTest(w.x, w.y);
+  const newHover = hit ? hit.id : null;
+  if (newHover !== S.hoverId) {
+    S.hoverId = newHover;
+    canvas.style.cursor = hit ? 'pointer' : 'default';
+    if (!S.simRunning) render();
+  }
+});
+
+canvas.addEventListener('mouseup', e => {
+  if (S.drag) {
+    // Compare in the SAME (canvas-relative) coordinate space that mousedown
+    // stored startX/startY in — using raw e.clientX here would add the canvas's
+    // page offset (the sidebar width) and misread every click as a drag.
+    const rect = canvas.getBoundingClientRect();
+    const sx = e.clientX - rect.left, sy = e.clientY - rect.top;
+    const dist = Math.hypot(sx - S.drag.startX, sy - S.drag.startY);
+    if (S.drag.type === 'node' && dist <= 4) {
+      selectNode(S.drag.id);           // click on node
+    } else if (S.drag.type === 'pan' && dist <= 4) {
+      selectNode(null);                // click on empty space → deselect
+    }
+    S.drag = null;
+  }
+});
+
+canvas.addEventListener('mouseleave', () => { S.drag = null; S.hoverId = null; });
+
+canvas.addEventListener('wheel', e => {
+  e.preventDefault();
+  const rect = canvas.getBoundingClientRect();
+  const sx = e.clientX - rect.left, sy = e.clientY - rect.top;
+  const factor = e.deltaY < 0 ? 1.1 : 0.9;
+  const newZoom = Math.min(5, Math.max(0.1, S.zoom * factor));
+  S.panX = sx - (sx - S.panX) * (newZoom / S.zoom);
+  S.panY = sy - (sy - S.panY) * (newZoom / S.zoom);
+  S.zoom = newZoom;
+  if (!S.simRunning) render();
+}, { passive: false });
+
+// ─── Selection & Detail Panel ─────────────────────────────────────────────────
+function selectNode(id) {
+  S.selectedId = id;
+  const rp = document.getElementById('rpanel');
+  const rpClose = document.getElementById('rpanel-close');
+  if (!id) {
+    rp.classList.remove('open');
+    rpClose.style.display = 'none';
+    resizeCanvas();
+    kickSim();
+    return;
+  }
+  const node = S.graphData && S.graphData.nodes.find(n => n.id === id);
+  if (!node) return;
+  rp.classList.add('open');
+  rpClose.style.display = 'flex';
+  renderDetailPanel(node);
+  resizeCanvas();
+  kickSim();
+}
+
+function closeRpanel() { selectNode(null); }
+
+function fmtTs(v) {
+  if (!v && v !== 0) return '<span class="detail-value muted">—</span>';
+  try {
+    const d = new Date(typeof v === 'number' ? v : Number(v));
+    if (isNaN(d.getTime())) return '<span class="detail-value muted">—</span>';
+    return `<span class="detail-value">${d.toLocaleString()}</span>`;
+  } catch { return '<span class="detail-value muted">—</span>'; }
+}
+
+function fmtVal(v) {
+  if (v === null || v === undefined) return '<span class="detail-value muted">—</span>';
+  if (typeof v === 'boolean') return `<span class="detail-value">${v ? 'Yes' : 'No'}</span>`;
+  if (typeof v === 'number') return `<span class="detail-value mono">${v}</span>`;
+  const s = String(v);
+  if (!s) return '<span class="detail-value muted">—</span>';
+  return `<span class="detail-value">${escH(s)}</span>`;
+}
+
+function escH(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+const TS_FIELDS = ['created_at','updated_at','dispatched_at','completed_at'];
+const SKIP_FIELDS = ['actions'];
+
+function renderDetailPanel(node) {
+  const el = document.getElementById('rpanel-content');
+  const col = nodeColor(node);
+  const d = node.detail || {};
+  let html = '';
+
+  html += `<div class="kind-badge" style="background:${col}22;color:${col};border:1px solid ${col}44">${escH(node.kind)}</div>`;
+  if (node.status) html += `<div class="kind-badge" style="background:${(STATUS_COLOR[node.status]||col)}22;color:${STATUS_COLOR[node.status]||col};border:1px solid ${STATUS_COLOR[node.status]||col}44;margin-left:4px">${escH(node.status)}</div>`;
+  html += `<div class="detail-node-title">${escH(node.label)}</div>`;
+  html += `<div class="detail-label">ID</div><div class="detail-value mono">${escH(node.id)}</div>`;
+  if (node.substrate) html += `<div class="detail-label">Substrate</div><div class="detail-value">${escH(node.substrate)}</div>`;
+  if (node.project) html += `<div class="detail-label">Project</div><div class="detail-value">${escH(node.project)}</div>`;
+
+  html += '<hr>';
+
+  for (const [k, v] of Object.entries(d)) {
+    if (SKIP_FIELDS.includes(k)) continue;
+    const label = k.replace(/_/g,' ');
+    html += `<div class="detail-label">${escH(label)}</div>`;
+    if (TS_FIELDS.includes(k)) html += fmtTs(v);
+    else if (Array.isArray(v)) {
+      if (!v.length) html += '<span class="detail-value muted">—</span>';
+      else html += `<div class="detail-value">${v.map(escH).join(', ')}</div>`;
+    } else html += fmtVal(v);
+  }
+
+  // plan actions
+  if (node.kind === 'plan' && Array.isArray(d.actions) && d.actions.length) {
+    html += '<hr><div class="detail-label">Actions</div>';
+    html += '<div class="actions-row" id="plan-actions">';
+    const ACTION_LABELS = {
+      scope:'Scope', dispatch:'Dispatch', park:'Park', promote:'Promote',
+      block:'Block', unblock:'Unblock', complete:'Complete'
+    };
+    const DANGER_ACTIONS = ['block','park'];
+    for (const a of d.actions) {
+      const lbl = ACTION_LABELS[a] || a;
+      const cls = DANGER_ACTIONS.includes(a) ? 'danger' : '';
+      html += `<button class="${cls}" onclick="planAction('${escH(node.id)}','${escH(a)}')">${lbl}</button>`;
+    }
+    html += '</div>';
+  }
+
+  el.innerHTML = html;
+}
+
+// ─── API Calls ────────────────────────────────────────────────────────────────
+async function fetchGraph() {
+  try {
+    const r = await fetch('/api/graph');
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const data = await r.json();
+    applyGraph(data);
+  } catch (e) {
+    console.error('fetchGraph:', e);
+  }
+}
+
+function applyGraph(data) {
+  // preserve positions for existing nodes; only auto-frame on the first load so
+  // live updates don't yank a view the user has panned/zoomed.
+  const firstLoad = !S.graphData;
+  S.graphData = data;
+  ensurePositions(data.nodes || []);
+  if (firstLoad) S.fitPending = true;
+  updateStats(data.stats || {});
+  buildFilters();
+  kickSim();
+  // refresh detail panel if selected node still exists
+  if (S.selectedId) {
+    const n = data.nodes.find(x => x.id === S.selectedId);
+    if (n) renderDetailPanel(n);
+    else selectNode(null);
+  }
+}
+
+function updateStats(stats) {
+  document.getElementById('s-plans').textContent = stats.plans ?? '–';
+  document.getElementById('s-caps').textContent = stats.capabilities ?? '–';
+  document.getElementById('s-intents').textContent = stats.intents ?? '–';
+  document.getElementById('s-decisions').textContent = stats.decisions ?? '–';
+  document.getElementById('s-substrates').textContent = stats.substrates ?? '–';
+  document.getElementById('s-projects').textContent = stats.projects ?? '–';
+
+  const chips = document.getElementById('status-chips');
+  chips.innerHTML = '';
+  const pbs = stats.plans_by_status || {};
+  for (const [st, cnt] of Object.entries(pbs)) {
+    if (!cnt) continue;
+    const col = STATUS_COLOR[st] || '#8b91a1';
+    chips.innerHTML += `<span class="chip" style="background:${col}22;color:${col};border-color:${col}44">${escH(st)}: ${cnt}</span>`;
+  }
+}
+
+const KIND_ORDER = ['plan','capability','intent','decision','substrate','project'];
+
+function buildFilters() {
+  const el = document.getElementById('filter-kinds');
+  if (el.childElementCount > 0) return; // already built
+  el.innerHTML = '';
+  for (const k of KIND_ORDER) {
+    const col = KIND_COLOR[k] || '#8b91a1';
+    const checked = S.visibleKinds.has(k) ? 'checked' : '';
+    el.innerHTML += `
+      <div class="filter-row">
+        <input type="checkbox" id="fk-${k}" ${checked} onchange="toggleKind('${k}',this.checked)">
+        <span class="kind-dot" style="background:${col}"></span>
+        <label for="fk-${k}" style="margin:0;color:var(--text);font-size:12px;cursor:pointer">${k}</label>
+      </div>`;
+  }
+}
+
+function toggleKind(k, on) {
+  if (on) S.visibleKinds.add(k);
+  else S.visibleKinds.delete(k);
+  kickSim();
+}
+
+async function fetchHealth() {
+  try {
+    const r = await fetch('/api/health');
+    if (!r.ok) return;
+    const d = await r.json();
+    const sn = document.getElementById('space-name');
+    sn.textContent = d.space?.name || '';
+    if (d.agentviz_url) S.agentVizUrl = d.agentviz_url;
+  } catch {}
+}
+
+// ─── SSE / Polling ───────────────────────────────────────────────────────────
+function setLiveDot(state) {
+  const d = document.getElementById('live-dot');
+  d.className = 'live-dot';
+  if (state === 'green') { d.style.background='#50fa7b'; d.style.boxShadow='0 0 6px #50fa7b80'; d.title='Live (SSE)'; }
+  else if (state === 'amber') { d.style.background='#ffb86c'; d.style.boxShadow='0 0 6px #ffb86c80'; d.title='Polling'; }
+  else { d.style.background='#ff5555'; d.style.boxShadow='0 0 6px #ff555580'; d.title='Disconnected'; }
+}
+
+function startSSE() {
+  const es = new EventSource('/events');
+  es.addEventListener('hello', () => setLiveDot('green'));
+  es.addEventListener('update', () => fetchGraph());
+  es.onmessage = () => {}; // ignore unnamed
+  es.onerror = () => {
+    es.close();
+    setLiveDot('amber');
+    startPolling();
+  };
+}
+
+function startPolling() {
+  let lastV = S.version;
+  const iv = setInterval(async () => {
+    try {
+      const r = await fetch('/api/version');
+      if (!r.ok) throw new Error();
+      const {version} = await r.json();
+      if (version !== lastV) { lastV = version; fetchGraph(); }
+      setLiveDot('amber');
+    } catch { setLiveDot('red'); }
+  }, 2000);
+}
+
+// ─── Forms ───────────────────────────────────────────────────────────────────
+async function submitPlan(e) {
+  e.preventDefault();
+  const title = document.getElementById('fp-title').value.trim();
+  const substrate = document.getElementById('fp-substrate').value.trim() || undefined;
+  const description = document.getElementById('fp-desc').value.trim() || undefined;
+  const touchesRaw = document.getElementById('fp-touches').value;
+  const touches = touchesRaw.split(',').map(x=>x.trim()).filter(Boolean);
+  const mode = document.getElementById('fp-mode').value;
+  try {
+    const r = await fetch('/api/plan', {
+      method:'POST', headers:{'Content-Type':'application/json','X-G8-Token':TOKEN},
+      body: JSON.stringify({title, substrate, description, touches, mode})
+    });
+    const d = await r.json();
+    if (d.ok) {
+      toast(`Plan created. ${d.recommendation ? 'Recommendation: '+d.recommendation : ''}`, 'ok');
+      document.getElementById('form-plan').reset();
+    } else { toast(d.error || 'Error creating plan', 'err'); }
+  } catch(ex) { toast('Network error: '+ex.message, 'err'); }
+}
+
+async function submitSubstrate(e) {
+  e.preventDefault();
+  const name = document.getElementById('fs-name').value.trim();
+  const wip_cap = document.getElementById('fs-wip').value ? parseInt(document.getElementById('fs-wip').value) : undefined;
+  const stale_days = document.getElementById('fs-stale').value ? parseInt(document.getElementById('fs-stale').value) : undefined;
+  try {
+    const r = await fetch('/api/substrate', {
+      method:'POST', headers:{'Content-Type':'application/json','X-G8-Token':TOKEN},
+      body: JSON.stringify({name, wip_cap, stale_days})
+    });
+    const d = await r.json();
+    if (d.ok) { toast('Substrate added', 'ok'); document.getElementById('form-substrate').reset(); }
+    else { toast(d.error || 'Error adding substrate', 'err'); }
+  } catch(ex) { toast('Network error: '+ex.message, 'err'); }
+}
+
+async function planAction(id, action) {
+  let reason = null;
+  if (action === 'park' || action === 'block') {
+    reason = prompt(`Reason for ${action} (optional):`) || null;
+  }
+  try {
+    const r = await fetch(`/api/plan/${encodeURIComponent(id)}/${action}`, {
+      method:'POST', headers:{'Content-Type':'application/json','X-G8-Token':TOKEN},
+      body: JSON.stringify({reason})
+    });
+    const d = await r.json();
+    if (d.ok) toast(`Action "${action}" applied`, 'ok');
+    else toast(d.error || `Error: ${action}`, 'err');
+  } catch(ex) { toast('Network error: '+ex.message, 'err'); }
+}
+
+// ─── Toasts ───────────────────────────────────────────────────────────────────
+function toast(msg, type='info') {
+  const el = document.createElement('div');
+  el.className = `toast ${type}`;
+  el.textContent = msg;
+  document.getElementById('toasts').appendChild(el);
+  requestAnimationFrame(() => { el.classList.add('show'); });
+  setTimeout(() => {
+    el.classList.remove('show');
+    setTimeout(() => el.remove(), 250);
+  }, 4000);
+}
+
+// ─── Collapsibles ────────────────────────────────────────────────────────────
+function toggleColl(header) {
+  const body = header.nextElementSibling;
+  const arrow = header.querySelector('.coll-arrow');
+  body.classList.toggle('open');
+  arrow.classList.toggle('open');
+}
+
+// ─── Toolbar buttons ─────────────────────────────────────────────────────────
+document.getElementById('btn-download').onclick = () => {
+  window.location = '/api/scene?download=1';
+};
+document.getElementById('btn-agentviz').onclick = () => {
+  // The explorer loads our live scene through the `g8-live` preset, whose
+  // dataset URL points back at this server's /api/scene (see agentviz
+  // presets/g8-live.json). The bare ?scene= URL param is ignored at startup.
+  const url = S.agentVizUrl + '/?preset=g8-live';
+  window.open(url, '_blank');
+};
+
+// ─── Init ────────────────────────────────────────────────────────────────────
+async function init() {
+  resizeCanvas();
+  await fetchHealth();
+  await fetchGraph();
+  buildFilters();
+  startSSE();
+}
+
+// Press "f" to re-frame the graph in the viewport (ignored while typing in a form).
+window.addEventListener('keydown', e => {
+  if (e.key === 'f' && !/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName || '')) {
+    fitView();
+    render();
+  }
+});
+
+init();
+</script>
+</body>
+</html>

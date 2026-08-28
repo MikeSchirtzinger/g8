@@ -1,0 +1,97 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/g8-core",
+    "crates/g8-extractor",
+    "crates/g8-store",
+    "crates/g8-planner",
+    "crates/g8-conflict",
+    "crates/g8-obligations",
+    "crates/g8",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.78"
+license = "MIT OR Apache-2.0"
+authors = ["g8 contributors"]
+repository = "https://github.com/MikeSchirtzinger/g8"
+homepage = "https://github.com/MikeSchirtzinger/g8"
+documentation = "https://docs.rs/g8-core"
+readme = "README.md"
+description = "G8 (pronounced gate): machine-checked obligations for agentic software development. A structural gate over the compiler, run in pre-commit or CI."
+keywords = ["obligations", "governance", "invariants", "agents", "ci"]
+categories = ["development-tools"]
+
+# Edition 2024 was considered but pinned at 2021: rusqlite/refinery/clap MSRV
+# and the broader Rust-toolchain pin (rust-toolchain.toml = stable) compose
+# more cleanly on 2021. Bump when ecosystem moves.
+
+[workspace.dependencies]
+# ── Core data + (de)serialization ───────────────────────────────────────────
+serde       = { version = "1", features = ["derive"] }
+serde_json  = "1"
+toml        = "0.8"
+
+# ── Errors + diagnostics ────────────────────────────────────────────────────
+thiserror   = "1"
+anyhow      = "1"
+
+# ── Tracing (MANDATORY — non-optional per ARCHITECTURE.md §G.5) ────────────
+tracing            = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "json"] }
+
+# ── CLI surface ─────────────────────────────────────────────────────────────
+clap     = { version = "4", features = ["derive", "wrap_help"] }
+
+# ── Embedded dashboard server (`g8 serve`) ─────────────────────────────────
+# Synchronous, no async runtime — fits the dependency-minimalism principle.
+# Isolated to g8 (the binary edge); the library crates stay HTTP-free.
+tiny_http = "0.12"
+
+# ── Embedded substrate (per R4 §2) ─────────────────────────────────────────
+rusqlite = { version = "0.31", features = ["bundled", "serde_json"] }
+refinery = { version = "0.8", features = ["rusqlite"] }
+
+# ── Filesystem walking + change detection ──────────────────────────────────
+ignore = "0.4"
+notify = "6"
+
+# ── Regex (post-extraction name parsing per R2 §5) ─────────────────────────
+regex = "1"
+
+# ── Time ────────────────────────────────────────────────────────────────────
+chrono = { version = "0.4", default-features = false, features = ["std", "serde", "clock"] }
+
+# ── IDs ─────────────────────────────────────────────────────────────────────
+# sha2: deterministic content-derived IDs (Q4 ruling — deterministic zone).
+# nanoid: retained ONLY for g8's feature-gated `serve` token minting
+# (legitimate, opt-in randomness outside the deterministic zone).
+sha2   = "0.10"
+nanoid = "0.4"
+
+# ── Internal workspace crates (used by other workspace crates) ─────────────
+g8-core       = { version = "0.1.0", path = "crates/g8-core" }
+g8-extractor  = { version = "0.1.0", path = "crates/g8-extractor" }
+g8-store      = { version = "0.1.0", path = "crates/g8-store" }
+g8-planner    = { version = "0.1.0", path = "crates/g8-planner" }
+g8-conflict   = { version = "0.1.0", path = "crates/g8-conflict" }
+g8-obligations = { version = "0.1.0", path = "crates/g8-obligations" }
+
+# ── Test-time only ──────────────────────────────────────────────────────────
+tempfile     = "3"
+insta        = { version = "1", features = ["json"] }
+
+[profile.release]
+lto           = "thin"
+codegen-units = 1
+strip         = true
+opt-level     = 3
+
+[profile.dev]
+# rusqlite-bundled SQLite is the slow part; opt-level=1 on deps keeps it tolerable
+opt-level = 0
+
+[profile.dev.package."*"]
+opt-level = 1

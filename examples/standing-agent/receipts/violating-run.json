@@ -1,0 +1,24 @@
+{
+  "meta": {
+    "run_id": "standing-agent-run-0012",
+    "agent": "content-ops-agent",
+    "git_head": "e5f6a7b8"
+  },
+  "actions": [
+    {
+      "kind": "publish",
+      "target": { "domain": "totally-unaffiliated-blog.example" }
+    },
+    {
+      "kind": "publish",
+      "target": { "domain": "example.com" },
+      "source_ref": "docs/ok.md"
+    },
+    { "kind": "spend", "amount": 300.0, "note": "ad spend spike" },
+    { "kind": "spend", "amount": 275.0, "note": "unexpected overage" },
+    { "kind": "post", "risky": false },
+    { "kind": "post", "risky": false },
+    { "kind": "post", "risky": false },
+    { "kind": "post", "risky": true, "escalate": false }
+  ]
+}

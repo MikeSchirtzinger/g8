@@ -1,0 +1,3046 @@
+{
+  "meta": {
+    "artifact": "g8-obligations",
+    "version": "0.1.0-final-r3",
+    "spec_sha256": "49e825a4d1a47f076d948033105d693b0f5d3097a2fa5f13134ffb2fb5ce746b",
+    "input": "decisions-input.json (P9 why_kind corrected, see fix_log), obligations-draft.json",
+    "id_policy": "OBL-<PARENT>-<NN>; NN = two-digit sequence in SPEC file order within parent. Array order: parents grouped P, D, N, G (in that group order); WITHIN each group, parent ids are sorted NUMERICALLY (D1 < D2 < ... < D10 < D11 -- NOT lexicographically, where the string \"D10\" < \"D2\"); within a parent, NN ascends. Fixed per review DEF-07: the draft's stated policy and its actual array order disagreed (actual order was D-then-P-then-N-then-G, not the stated P-then-D-then-N-then-G), and neither this document nor decisions-input.json anywhere stated the numeric-vs-lexicographic sort rule the true order actually required. obligations-final.json's array is mechanically re-sorted by script to match this stated policy exactly -- not by hand.",
+    "parent_choice_policy": "When a Section-6 locked decision (D*) and a Section-3 principle (P*) state the same constraint, the Section-6 decision is the parent (SPEC.md L122: 'Builders inherit these without renegotiation.'). A Section-4 non-goal (N*) is parent only when no principle/decision covers the same ground with more operative detail; where a non-goal is itself the most concrete, actionable statement of a constraint (N4 MCP, N5 web UI, N6 stale-promotion, N7 scan read-only, N8 WAL coordination), it is its own parent. Restatements compile ONCE under the chosen parent; every other id is recorded in that obligation's also_stated_by (provenance only, never a second descent, per contract rule 1).",
+    "coverage_policy": "Every one of the 30 parents (P1-P10, D1-D11, N1-N8, G1) is either (a) the descends_from of >=1 obligation, (b) present in the also_stated_by list of >=1 obligation (a restatement fully absorbed by its operative parent — this satisfies coverage, it is not a silent drop), or (c) explicitly listed in open_questions with a reason, or a combination of (b)+(c) when only part of the parent's text compiles deterministically. See open-questions-draft.md for the (c) items. UPDATE (F1): P6 is no longer a zero-obligation parent -- OBL-P6-01 (DEF-04 fix) now covers its span-instrumentation half; only the trace-export-target half remains in open_questions (OQ-02, narrowed).",
+    "signal_policy": "All 24 obligations here compile SPEC decisions about how g8 itself must be built -- not gating rules g8's own product runs against a third-party annotated codebase. g8-conflict's real ConflictKind::GovernanceViolation / ContradictoryDecisions variants (g8-core/src/conflict.rs:33-42) are, per their own doc comments, scoped to cross-ConvergenceSpace conflicts today (a Boundary-intent violation / a same-title-different-body Decision, both 'in the remote space'). Applying GovernanceViolation to 'g8's own repo violates g8's own SPEC' is a dogfooding theory: g8's own CLAUDE.md '## What to avoid' section classifies as Intent{kind:Boundary} under D4's own section-to-kind table, so a downstream coding agent's Plan/Capability that violates one of these obligations is structurally identical to 'a plan's substrate forbidden by a Boundary intent' -- just self-scoped rather than cross-space-scoped. Every obligation is therefore marked signal.wiring=compiled_intent_extension (this wiring is not built in v0.1 code; this compile defines it -- see OQ-07) except OBL-G1-01, whose codegraph_vocabulary_drift gate and Levenshtein/prefix algorithm are reused directly from an existing, already-implemented predicate and is marked advisory:true per P9 ('No Codegraph hard dep' -- codegraph_* gates are optional/advisory for g8).",
+    "determinism_note": "No timestamps, no randomness, no absolute scratch paths inside this artifact. All paths repo-relative. Stable ordering throughout.",
+    "fix_log": {
+      "phase": "F1 (resume of C1), fix cycle 1 of max 2",
+      "inputs": [
+        "SCRATCH/review-report.md (16 defects DEF-01..DEF-16, 5 blocker/6 major/5 minor)",
+        "SCRATCH/traces/trace-report.md (V2: all 5 traces PASS; 2 side findings -- tiny_http/g8-serve live drift aside on T1, OBL-D1-01 convergence_test wording issue on T2)",
+        "SCRATCH/traces/v2v/validation-report.md (V2v: all 5 traces independently re-executed, PASS, repo integrity confirmed)",
+        "1 new live-code finding, independently verified this session (not flagged by V1 or V2 directly, though V2's T1 aside pointed at the same dependency): ARCHITECTURE.md L1564 'serve is a post-v0.1 addition' vs. already-shipped Command::Serve/cli.rs:81/main.rs:96"
+      ],
+      "fixed": [
+        "DEF-01",
+        "DEF-02",
+        "DEF-03",
+        "DEF-04",
+        "DEF-05",
+        "DEF-06",
+        "DEF-07",
+        "DEF-09",
+        "DEF-10",
+        "DEF-11",
+        "DEF-12",
+        "DEF-13",
+        "DEF-14",
+        "DEF-16",
+        "checklist-row-5 (N6/N7 prose-not-globs, per-checklist-verdicts table, not a numbered DEF)"
+      ],
+      "disclosed_not_fully_closeable_this_cycle": [
+        "DEF-08 (dogfooding theory has 2 provable holes -- strengthened OQ-07 with both specific findings; no code-level fix is available to a SCRATCH-only, no-repo-writes phase)",
+        "DEF-15 (vendored/hand-copied non-deterministic code is undetectable by a dependency-graph check by construction -- disclosed in OBL-D11-02.rule.params.known_limitation; no fully deterministic complete check is achievable from current evidence, per review's own hedge)"
+      ],
+      "new_obligations_added": [
+        "OBL-P6-01 (DEF-04)",
+        "OBL-D11-04 (DEF-11)"
+      ],
+      "new_live_drift_found_independently_this_session": "g8 serve (web dashboard) is fully implemented in the real repo (cli.rs:81, main.rs:96, tiny_http dependency, ARCHITECTURE.md 9.2 full route table) despite ARCHITECTURE.md 9 (L1564) explicitly calling it 'a post-v0.1 addition' and SPEC.md D7/N5 both omitting/forbidding it -- see OQ-08 and known_live_violation fields on OBL-D7-01 / OBL-N5-01. This means OBL-D7-01 and OBL-N5-01, if their convergence_tests were actually run against the real repo today, would BOTH currently FAIL.",
+      "obligation_count": "pass-1 delta only: 24 -> 26 (net +2: OBL-P6-01, OBL-D11-04). NOT the final count -- see meta.final_obligation_count and fix_log_2.obligation_count for what pass 2 added on top of this."
+    },
+    "codegraph_gate_anchoring_note": "Per review instruction (second pass): explicit disposition of all four codegraph_* verbs against this obligation set. codegraph_drift_edges: anchored, OBL-D6-02 (inferred from D6's verbatim drift_hints column name + D2's Capability.consumes/produces — see that obligation's rule.params.inference for the honest, labeled reasoning). codegraph_vocabulary_drift: anchored, OBL-G1-01 (direct, not inferred — reuses the real algorithm verbatim). codegraph_unintegrated_capabilities: NOT separately anchored. Its concept (a capability with no proving convergence test) is already covered by an g8-NATIVE mechanism, not a codegraph reuse: D10's 'no_matching_convergence_test' reason in the stable g8 check --json vocabulary (OBL-D10-01), which is real, already-designed g8 functionality (wiring: existing within D10's own contract), not a compiled_intent_extension. Compiling a second, codegraph-gated obligation for the same underlying concept would be a needless duplicate of OBL-D10-01, not new coverage. codegraph_failing_convergence: genuinely unanchored. A `last_run_status` field of that kind would be populated by a separate convergence-test-runner CLI — no evidence anywhere in this compile's packs shows g8 has an equivalent test-run-tracking mechanism on its ConvergenceTest annotations. Compiling an obligation here would require inventing that mechanism's existence. Routed to OQ-09 instead.",
+    "fix_log_2": {
+      "phase": "F1, fix pass 2 of max 2 (reviewer re-dispatch after 1st pass)",
+      "changes_this_pass": [
+        "CONF-DX-01 evidence: decision -> decision_id, mirrors real Evidence::DecisionRef{decision_id,title} exactly per review instruction; quotes kept in sibling Note entries",
+        "OBL-P6-01: fully re-grounded in ARCHITECTURE.md section 12 (read this session) -- 9-span table, subscriber init (stderr writer), G8_TRACE_JSON export gate all now required/tested",
+        "OQ-02: DISSOLVED -- section 12 answers both halves of P6 (span-opening AND export target/format); nothing genuinely open remains",
+        "OBL-D1-01: exact rg command substituted, verified this session (0 false positives on g8-extractor/src/lib.rs, exact 8/8 matches on examples/rust-service/src/lib.rs)",
+        "NEW OBL-D6-02: codegraph_drift_edges anchored via D6's verbatim drift_hints column, honestly labeled as inferred (not verbatim), with an explicit caveat about g8's unconfirmed internal wiring representation",
+        "meta.codegraph_gate_anchoring_note added: explicit disposition of all 4 codegraph_* verbs (drift_edges anchored/inferred, vocabulary_drift anchored/direct, unintegrated_capabilities superseded by existing OBL-D10-01 no_matching_convergence_test [not duplicated], failing_convergence genuinely unanchored -> OQ-09)",
+        "NEW OQ-09: codegraph_failing_convergence has no g8-native equivalent evidenced anywhere; also carries OBL-D6-02's wiring-representation caveat"
+      ],
+      "obligation_count": "pass-2 delta only: 26 -> 27 (net +1: OBL-D6-02). Cumulative final count after both passes: 27 -- see meta.final_obligation_count (single source of truth)."
+    },
+    "final_obligation_count": 27,
+    "fix_log_3": {
+      "phase": "F1, fix pass 3 (surgical, 4 items only, per reviewer's cycle-2 dispatch)",
+      "changes_this_pass": [
+        "DEF-17: OBL-G1-01.convergence_test.fails_when pointed at a nonexistent 'OQ-08 addendum'; repointed to new OQ-10 (the 'what counts as new' baseline-diff ambiguity is real and distinct from OQ-08's/OQ-09's actual content, so a new, properly-numbered question was written rather than stretching an existing one)",
+        "DEF-18: OBL-N5-01's 3rd check pattern changed from the literal 'Command::Serve' (contradicted its own 'regardless of name' claim) to 'tiny_http::Server::$METHOD($$$ARGS)' -- a genuine API/behavior-surface match, parallel to OBL-N4-01's DEF-14 fix",
+        "bookkeeping: added meta.final_obligation_count=27 as the single unambiguous source of truth; relabeled fix_log/fix_log_2's obligation_count strings as explicit pass-specific deltas so neither is misread as final in isolation",
+        "fix-log.md: confirmed it already existed on disk at the time of this patch (257 lines, verified via `test -f` + `wc -l` before making any change this pass) -- the tracer's 'does not exist' finding does not match direct observation; rewritten/consolidated anyway per instruction, and this discrepancy is reported to reviewer rather than silently accepted"
+      ],
+      "OBL-P6-01_untouched": "verified via sha256 content hash, snapshotted before and after this pass -- see fix-log.md"
+    }
+  },
+  "obligations": [
+    {
+      "id": "OBL-P5-01",
+      "descends_from": {
+        "decision": "P5",
+        "title": "Multi-agent, not human-bounded.",
+        "why": "5. **Multi-agent, not human-bounded.** WIP caps are per-substrate, adaptive, NOT per-developer. Multiple agents can coordinate against the same store.",
+        "why_kind": "statement_only",
+        "source": {
+          "file": "SPEC.md",
+          "lines": "L67",
+          "sha256": "49e825a4d1a47f076d948033105d693b0f5d3097a2fa5f13134ffb2fb5ce746b"
+        }
+      },
+      "also_stated_by": [],
+      "rule": {
+        "kind": "cap_wip",
+        "params": {
+          "scope_dimension": "substrate",
+          "forbidden_scope_dimension": "developer/agent identity",
+          "description": "WIP caps (substrate_budget) must be keyed by substrate name, never by an individual human developer or a specific agent identity. Multiple distinct agents/developers may consume the same substrate's budget concurrently.",
+          "adaptive_formula": "OUT OF SCOPE -- see OQ-01; this obligation covers only the per-substrate-not-per-developer scoping, not the adaptive adjustment function"
+        }
+      },
+      "scope": {
+        "crates": [
+          "g8-store",
+          "g8-planner"
+        ],
+        "paths": [
+          "crates/g8-store/src/**",
+          "crates/g8-planner/src/**"
+        ]
+      },
+      "convergence_test": {
+        "id": "conv-p5-01",
+        "check": "grep the substrate_budget table schema / query bindings for a per-developer or per-agent-id column used as a WIP-cap partition key",
+        "fails_when": "a WIP-cap query partitions or filters budget by developer/agent identity rather than by substrate name alone"
+      },
+      "checker": {
+        "mode": "typed",
+        "checks": [
+          {
+            "backend": "rg_match_count",
+            "args": {
+              "pattern": "(?i)\\b(developer_id|dev_id|agent_id|user_id)\\b",
+              "glob": [
+                "crates/g8-store/src/queries.rs",
+                "crates/g8-store/src/migrations/*.sql"
+              ],
+              "expected": {
+                "kind": "zero"
+              }
+            }
+          }
+        ]
+      },
+      "signal": {
+        "gate": "g8-conflict",
+        "conflict_kind": "GovernanceViolation",
+        "wiring": "compiled_intent_extension",
+        "advisory": false
+      }
+    },
+    {
+      "id": "OBL-P6-01",
+      "descends_from": {
+        "decision": "P6",
+        "title": "Tracing is contract, not baggage.",
+        "why": "6. **Tracing is contract, not baggage.** Every store query opens a tracing span. Every CLI command exports a trace on exit.",
+        "why_kind": "statement_only",
+        "source": {
+          "file": "SPEC.md",
+          "lines": "L69",
+          "sha256": "49e825a4d1a47f076d948033105d693b0f5d3097a2fa5f13134ffb2fb5ce746b"
+        }
+      },
+      "also_stated_by": [
+        "ARCHITECTURE.md section 12 (Tracing -- span inventory and field schema, L1758-1787)"
+      ],
+      "rule": {
+        "kind": "require_pattern",
+        "params": {
+          "grounding": "Fully grounded per reviewer direction (2nd F1 pass): read ARCHITECTURE.md sec 12 this session. It specifies BOTH halves of P6, not just the span-opening half found in the 1st pass (store_impl.rs:3 doc comment + 35 #[instrument(...)] sites, re-verified via grep -c this session, independent of V1's cited count of 30).",
+          "architecture_md_section_12_verbatim": "'Every crate that does work opens spans. Field naming is consistent so a trace consumer (Jaeger, Honeycomb, or tracing-subscriber JSON) can correlate.' (ARCHITECTURE.md L1760) Span table (L1762-1772): cli.command (g8, fields: command/args/space_id/duration_ms, wraps entire CLI invocation) | extractor.scan_dir | extractor.ast_grep | extractor.parse_markdown | store.query | store.apply_scan | store.planner_intent_check | planner.plan_check | conflict.compare_spaces (9 named spans total, one row per crate-level operation). Init (L1776-1783): 'tracing_subscriber::fmt().with_env_filter(...).with_writer(std::io::stderr) // never stdout (would break JSON mode) ...compact().init();'. Export (L1785): 'JSON-format traces are exported when G8_TRACE_JSON=1 env var is set; otherwise compact human format on stderr.'",
+          "required_spans": [
+            {
+              "span": "cli.command",
+              "crate": "g8",
+              "fields": [
+                "command",
+                "args",
+                "space_id",
+                "duration_ms"
+              ],
+              "when": "wraps entire CLI invocation"
+            },
+            {
+              "span": "extractor.scan_dir",
+              "crate": "g8-extractor",
+              "fields": [
+                "root",
+                "files_scanned",
+                "annotations_found",
+                "duration_ms"
+              ],
+              "when": "per Extractor::scan_dir"
+            },
+            {
+              "span": "extractor.ast_grep",
+              "crate": "g8-extractor",
+              "fields": [
+                "rule_file",
+                "target",
+                "exit_code",
+                "duration_ms"
+              ],
+              "when": "per subprocess"
+            },
+            {
+              "span": "extractor.parse_markdown",
+              "crate": "g8-extractor",
+              "fields": [
+                "file",
+                "sections_found"
+              ],
+              "when": "per AGENTS.md/CLAUDE.md"
+            },
+            {
+              "span": "store.query",
+              "crate": "g8-store",
+              "fields": [
+                "query_name",
+                "rows_returned",
+                "duration_ms"
+              ],
+              "when": "per SQL call"
+            },
+            {
+              "span": "store.apply_scan",
+              "crate": "g8-store",
+              "fields": [
+                "project_id",
+                "inserted",
+                "deleted",
+                "duration_ms"
+              ],
+              "when": "per apply_scan"
+            },
+            {
+              "span": "store.planner_intent_check",
+              "crate": "g8-store",
+              "fields": [
+                "space_id",
+                "substrate",
+                "cap_names_count",
+                "duration_ms"
+              ],
+              "when": "per composite query"
+            },
+            {
+              "span": "planner.plan_check",
+              "crate": "g8-planner",
+              "fields": [
+                "space_id",
+                "recommendation",
+                "duration_ms"
+              ],
+              "when": "per Planner::plan_check"
+            },
+            {
+              "span": "conflict.compare_spaces",
+              "crate": "g8-conflict",
+              "fields": [
+                "local_space",
+                "remote_space",
+                "conflicts_found"
+              ],
+              "when": "per compare_spaces"
+            }
+          ],
+          "subscriber_init_requirements": [
+            "writer = std::io::stderr (never stdout -- would break --output json mode, consistent with D10's stdout=JSON/stderr=human contract)",
+            "compact() human format by default",
+            "EnvFilter::from_default_env with an 'g8=info' default directive"
+          ],
+          "export_requirement": "JSON-format trace export is gated by the G8_TRACE_JSON=1 environment variable; unset/0 means compact human format on stderr. No network exporter (P3 outranks P6 on conflict, SPEC.md L57) -- this is a local, deterministic, env-gated switch, consistent with that priority rule."
+        }
+      },
+      "scope": {
+        "crates": [
+          "g8",
+          "g8-extractor",
+          "g8-store",
+          "g8-planner",
+          "g8-conflict"
+        ],
+        "paths": [
+          "crates/g8/src/main.rs",
+          "crates/g8-store/src/store_impl.rs",
+          "crates/*/src/**"
+        ]
+      },
+      "convergence_test": {
+        "id": "conv-p6-01",
+        "check": "(a) rg -c '#\\[instrument' crates/g8-store/src/store_impl.rs -- assert every StoreConnection trait-impl pub fn (excluding open/open_in_memory/migrate) is preceded by #[instrument(...)]; (b) rg 'with_writer\\(std::io::stderr\\)' crates/g8/src/main.rs -- assert present; (c) run `G8_TRACE_JSON=1 g8 status` and `g8 status` (unset) against a fixture store, capture stderr both times, assert the first is JSON-parseable per-line and the second is not (compact human format)",
+        "fails_when": "(a) any non-exempt pub fn lacks #[instrument(...)]; (b) stderr writer is absent/changed to stdout; (c) G8_TRACE_JSON=1 does not change stderr's format to JSON"
+      },
+      "checker": {
+        "mode": "typed",
+        "checks": [
+          {
+            "backend": "rg_match_count",
+            "args": {
+              "pattern": "#\\[instrument",
+              "glob": [
+                "crates/g8-store/src/store_impl.rs"
+              ],
+              "expected": {
+                "kind": "at_least",
+                "value": 30
+              }
+            }
+          },
+          {
+            "backend": "rg_match_count",
+            "args": {
+              "pattern": "with_writer\\(std::io::stderr\\)",
+              "glob": [
+                "crates/g8/src/main.rs"
+              ],
+              "expected": {
+                "kind": "at_least",
+                "value": 1
+              }
+            }
+          },
+          {
+            "backend": "fixture_integration_test",
+            "args": {
+              "seed_files": [
+                {
+                  "path": "src/lib.rs",
+                  "content": "// @g8.capability(name = \"test-cap\", status = \"in_flight\", substrate = \"test\")\npub fn foo() {}\n"
+                }
+              ],
+              "setup": [
+                {
+                  "args": [
+                    "init"
+                  ],
+                  "env": {}
+                },
+                {
+                  "args": [
+                    "scan",
+                    "--no-watch",
+                    "--quiet",
+                    "-vv"
+                  ],
+                  "env": {
+                    "G8_TRACE_JSON": "1"
+                  }
+                },
+                {
+                  "args": [
+                    "scan",
+                    "--no-watch",
+                    "--quiet",
+                    "-vv"
+                  ],
+                  "env": {}
+                }
+              ],
+              "assertions": [
+                {
+                  "kind": "stderr_format",
+                  "from_step": 1,
+                  "json_lines": true
+                },
+                {
+                  "kind": "stderr_format",
+                  "from_step": 2,
+                  "json_lines": false
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "signal": {
+        "gate": "g8-conflict",
+        "conflict_kind": "GovernanceViolation",
+        "wiring": "compiled_intent_extension",
+        "advisory": false
+      }
+    },
+    {
+      "id": "OBL-P9-01",
+      "descends_from": {
+        "decision": "P9",
+        "title": "Lightweight, drop-into-any-repo.",
+        "why": "Binary size, install time, and runtime deps matter.",
+        "why_kind": "statement_only",
+        "source": {
+          "file": "SPEC.md",
+          "lines": "L75",
+          "sha256": "49e825a4d1a47f076d948033105d693b0f5d3097a2fa5f13134ffb2fb5ce746b"
+        }
+      },
+      "also_stated_by": [
+        "N1"
+      ],
+      "rule": {
+        "kind": "forbid_dependency",
+        "params": {
+          "deny_list": [
+            {
+              "crate": "surrealdb",
+              "basis": "literal",
+              "quote": "No SurrealDB v3. (P9, SPEC.md L75); also N1 verbatim: 'No SurrealDB. Substrate is local SQLite.' (SPEC.md L83)"
+            },
+            {
+              "crate": "graph-tool",
+              "basis": "literal",
+              "quote": "No Codegraph hard dep. (P9, SPEC.md L75) -- graph-tool may be shelled out to optionally/advisory but must never be a required Cargo dependency of any of the six crates"
+            }
+          ]
+        }
+      },
+      "scope": {
+        "crates": [
+          "g8-core",
+          "g8-extractor",
+          "g8-store",
+          "g8-planner",
+          "g8-conflict",
+          "g8"
+        ],
+        "paths": [
+          "Cargo.toml",
+          "crates/*/Cargo.toml"
+        ]
+      },
+      "convergence_test": {
+        "id": "conv-p9-01",
+        "check": "cargo metadata --format-version1 | jq '.packages[].dependencies[].name'; assert 'surrealdb' and 'graph-tool' are absent from every workspace crate's resolved dependency tree",
+        "fails_when": "either name appears as a required (non-optional, non-dev) dependency anywhere in the workspace"
+      },
+      "checker": {
+        "mode": "typed",
+        "checks": [
+          {
+            "backend": "cargo_metadata_no_dep",
+            "args": {
+              "denied": [
+                {
+                  "kind": "exact",
+                  "value": "surrealdb"
+                },
+                {
+                  "kind": "exact",
+                  "value": "graph-tool"
+                }
+              ],
+              "scope_crates": [],
+              "build_config": "default"
+            }
+          }
+        ]
+      },
+      "signal": {
+        "gate": "g8-conflict",
+        "conflict_kind": "GovernanceViolation",
+        "wiring": "compiled_intent_extension",
+        "advisory": false
+      }
+    },
+    {
+      "id": "OBL-D1-01",
+      "descends_from": {
+        "decision": "D1",
+        "title": "Annotation grammar: magic-comment only in v0.1.",
+        "why": "The R2 survey (§5.1, §7.2) shows that ast-grep's `#[capability($$$)]` pattern works for direct Rust attribute syntax but breaks on `cfg_attr`-wrapped forms (which require `kind: attribute_item + has: {regex}` workarounds). The R1 patterns table (A2) recommends adapting Rust proc-macros to a magic-comment form for cross-language uniformity. R3 §5.1 recommends ingesting AGENTS.md/CLAUDE.md alongside inline markers via a uniform extractor. Supporting both forms in v0.1 doubles the extractor surface, the parse-failure mode space, and the test matrix for an unclear win.",
+        "why_kind": "explicit_rationale",
+        "source": {
+          "file": "SPEC.md",
+          "lines": "L124-147",
+          "sha256": "49e825a4d1a47f076d948033105d693b0f5d3097a2fa5f13134ffb2fb5ce746b"
+        }
+      },
+      "also_stated_by": [
+        "P10"
+      ],
+      "rule": {
+        "kind": "require_pattern",
+        "params": {
+          "pattern_kind": "ast_grep",
+          "pattern": "// @g8.$KIND($$$ARGS)",
+          "description": "Every Capability/Intent/ConvergenceTest/Decision/Plan annotation must match the magic-comment grammar // @g8.<kind>(key=\"value\", ...), placed immediately before the annotated symbol with no blank line; multi-line forms wrap with // on each line.",
+          "glob": "crates/**/*.rs"
+        }
+      },
+      "scope": {
+        "crates": [
+          "g8-extractor"
+        ],
+        "paths": [
+          "crates/g8-extractor/src/**",
+          "crates/**/src/**"
+        ]
+      },
+      "convergence_test": {
+        "id": "conv-d1-01",
+        "check": "rg -n '^\\s*//\\s*@g8\\.(capability|intent|convergence_test|decision|plan)\\(' <target>. Verified working this session (not ast-grep --pattern, which is broken for this obligation -- see below): against crates/g8-extractor/src/lib.rs (the extractor's own source, containing the grammar string only in doc-comments/rationale text) it correctly returns ZERO matches; against the real fixture examples/rust-service/src/lib.rs it returns exactly the real 8 annotations present (4 capability, 4 convergence_test, lines 12,29,41,51,60,71,83,96), with no false positives or negatives. This rg-based line-regex check is an honest, independent re-implementation of D1's grammar (not a copy of g8-extractor's own ast-grep-rule-file mechanism at lib.rs:259, which is a valid alternative but not needed here -- a regex over comment TEXT is sufficient and simpler than AST matching for a regex-shaped grammar). Fixed per V2/T2 side finding: the original `ast-grep --pattern '// @g8.$KIND($$$ARGS)'` degenerates because Rust's tree-sitter tokenizes `//...` as one opaque line_comment node -- empirically confirmed 227 spurious matches on a real file.",
+        "fails_when": "an Annotation row exists in the store whose source span does not correspond to a //-prefixed magic-comment line matching the grammar"
+      },
+      "checker": {
+        "mode": "typed",
+        "checks": [
+          {
+            "backend": "rg_match_count",
+            "args": {
+              "pattern": "^\\s*//\\s*@g8\\.(capability|intent|convergence_test|decision|plan)\\(",
+              "glob": [
+                "crates/g8-extractor/src/lib.rs"
+              ],
+              "expected": {
+                "kind": "zero"
+              }
+            }
+          },
+          {
+            "backend": "rg_match_count",
+            "args": {
+              "pattern": "^\\s*//\\s*@g8\\.(capability|intent|convergence_test|decision|plan)\\(",
+              "glob": [
+                "examples/rust-service/src/lib.rs"
+              ],
+              "expected": {
+                "kind": "exactly",
+                "value": 8
+              }
+            }
+          }
+        ]
+      },
+      "signal": {
+        "gate": "g8-conflict",
+        "conflict_kind": "GovernanceViolation",
+        "wiring": "compiled_intent_extension",
+        "advisory": false
+      }
+    },
+    {
+      "id": "OBL-D1-02",
+      "descends_from": {
+        "decision": "D1",
+        "title": "Annotation grammar: magic-comment only in v0.1.",
+        "why": "The R2 survey (§5.1, §7.2) shows that ast-grep's `#[capability($$$)]` pattern works for direct Rust attribute syntax but breaks on `cfg_attr`-wrapped forms (which require `kind: attribute_item + has: {regex}` workarounds). The R1 patterns table (A2) recommends adapting Rust proc-macros to a magic-comment form for cross-language uniformity. R3 §5.1 recommends ingesting AGENTS.md/CLAUDE.md alongside inline markers via a uniform extractor. Supporting both forms in v0.1 doubles the extractor surface, the parse-failure mode space, and the test matrix for an unclear win.",
+        "why_kind": "explicit_rationale",
+        "source": {
+          "file": "SPEC.md",
+          "lines": "L124-147",
+          "sha256": "49e825a4d1a47f076d948033105d693b0f5d3097a2fa5f13134ffb2fb5ce746b"
+        }
+      },
+      "also_stated_by": [
+        "N2"
+      ],
+      "rule": {
+        "kind": "forbid_pattern",
+        "params": {
+          "pattern_kind": "ast_grep",
+          "pattern": "#[capability($$$ARGS)]",
+          "description": "g8-extractor must not implement parsing of a native Rust #[capability(...)] (or #[intent(...)], #[plan(...)], #[convergence_test(...)], #[decision(...)]) attribute_item in v0.1. Only the magic-comment surface (OBL-D1-01) is supported; native attribute parsing is deferred to v0.2.",
+          "glob": "crates/g8-extractor/src/**"
+        }
+      },
+      "scope": {
+        "crates": [
+          "g8-extractor"
+        ],
+        "paths": [
+          "crates/g8-extractor/src/**"
+        ]
+      },
+      "convergence_test": {
+        "id": "conv-d1-02",
+        "check": "ast-grep --lang rust --pattern '#[capability($$$ARGS)]' crates/g8-extractor/src/**/*.rs",
+        "fails_when": "g8-extractor contains a parse rule/handler recognizing #[capability(...)] (or sibling kinds) as an annotation source, as opposed to the string appearing only in a doc-comment or test fixture"
+      },
+      "checker": {
+        "mode": "typed",
+        "checks": [
+          {
+            "backend": "ast_grep_no_match",
+            "args": {
+              "patterns": [
+                "#[capability($$$ARGS)]"
+              ],
+              "lang": "rust",
+              "glob": [
+                "crates/g8-extractor/src/**"
+              ],
+              "exclude_glob": [],
+              "capture_predicate": null
+            }
+          }
+        ]
+      },
+      "signal": {
+        "gate": "g8-conflict",
+        "conflict_kind": "GovernanceViolation",
+        "wiring": "compiled_intent_extension",
+        "advisory": false
+      }
+    },
+    {
+      "id": "OBL-D2-01",
+      "descends_from": {
+        "decision": "D2",
+        "title": "Annotation taxonomy: five kinds + six-status lifecycle",
+        "why": "This lifecycle is small enough to enforce and rich enough to express park-and-resume, which is the state a coding agent actually needs.",
+        "why_kind": "explicit_rationale",
+        "source": {
+          "file": "SPEC.md",
+          "lines": "L149-157",
+          "sha256": "49e825a4d1a47f076d948033105d693b0f5d3097a2fa5f13134ffb2fb5ce746b"
+        }
+      },
+      "also_stated_by": [],
+      "rule": {
+        "kind": "require_status_value",
+        "params": {
+          "AnnotationKind": [
+            "capability",
+            "intent",
+            "convergence_test",
+            "decision",
+            "plan"
+          ],
+          "AnnotationKind_source": "g8-core/src/annotation.rs:57-63 (serde rename_all=snake_case) -- confirmed NO_DISCREPANCY vs SPEC Decision 2",
+          "PlanStatus": [
+            "Idea",
+            "Scoped",
+            "Dispatched",
+            "Blocked",
+            "Done",
+            "Parked"
+          ],
+          "PlanStatus_source": "g8-core/src/plan.rs:38-45 (serde rename_all=PascalCase)",
+          "CapabilityStatus": [
+            "proposed",
+            "in_flight",
+            "landed",
+            "stale",
+            "superseded",
+            "parked"
+          ],
+          "CapabilityStatus_source": "g8-core/src/model.rs:140-147 (serde rename_all=snake_case)",
+          "gating_enforced_on": [
+            "in_flight",
+            "landed"
+          ],
+          "note": "casing differs by design between PlanStatus (PascalCase) and CapabilityStatus (snake_case); this is the real, confirmed state, not a defect to fix"
+        }
+      },
+      "scope": {
+        "crates": [
+          "g8-core"
+        ],
+        "paths": [
+          "crates/g8-core/src/annotation.rs",
+          "crates/g8-core/src/plan.rs",
+          "crates/g8-core/src/model.rs"
+        ]
+      },
+      "convergence_test": {
+        "id": "conv-d2-01",
+        "check": "grep the three enum definitions; diff variant lists and #[serde(rename_all=...)] casing against the locked values above",
+        "fails_when": "AnnotationKind variant count != 5 or values != {capability,intent,convergence_test,decision,plan}; OR PlanStatus values/casing != {Idea,Scoped,Dispatched,Blocked,Done,Parked} PascalCase; OR CapabilityStatus values/casing != {proposed,in_flight,landed,stale,superseded,parked} snake_case; OR gating checks a status outside {in_flight,landed}"
+      },
+      "checker": {
+        "mode": "typed",
+        "checks": [
+          {
+            "backend": "rust_enum_shape",
+            "args": {
+              "file": "crates/g8-core/src/annotation.rs",
+              "enum_name": "AnnotationKind",
+              "expected_variants": [
+                "capability",
+                "intent",
+                "convergence_test",
+                "decision",
+                "plan"
+              ],
+              "expected_serde_rename_all": "snake_case"
+            }
+          },
+          {
+            "backend": "rust_enum_shape",
+            "args": {
+              "file": "crates/g8-core/src/plan.rs",
+              "enum_name": "PlanStatus",
+              "expected_variants": [
+                "Idea",
+                "Scoped",
+                "Dispatched",
+                "Blocked",
+                "Done",
+                "Parked"
+              ],
+              "expected_serde_rename_all": "PascalCase"
+            }
+          },
+          {
+            "backend": "rust_enum_shape",
+            "args": {
+              "file": "crates/g8-core/src/model.rs",
+              "enum_name": "CapabilityStatus",
+              "expected_variants": [
+                "proposed",
+                "in_flight",
+                "landed",
+                "stale",
+                "superseded",
+                "parked"
+              ],
+              "expected_serde_rename_all": "snake_case"
+            }
+          }
+        ]
+      },
+      "signal": {
+        "gate": "g8-conflict",
+        "conflict_kind": "GovernanceViolation",
+        "wiring": "compiled_intent_extension",
+        "advisory": false
+      }
+    },
+    {
+      "id": "OBL-D3-01",
+      "descends_from": {
+        "decision": "D3",
+        "title": "Multi-project topology: per-project store + space.toml federation, with cross-store ATTACH for queries.",
+        "why": "R4 §6 Risk 5 documents that SQLite's `ATTACH DATABASE` is the cleanest pattern for cross-store reads. R1 §8.1 Q1–Q4 explicitly defer these decisions to the architect; the per-project default + opt-in space is the lightest path that supports the single-repo and multi-repo use cases without forcing one to behave like the other. Forcing a global store (`~/.g8/projects/...`) couples the user's local fs to `g8`'s data model — bad.",
+        "why_kind": "explicit_rationale",
+        "source": {
+          "file": "SPEC.md",
+          "lines": "L159-197",
+          "sha256": "49e825a4d1a47f076d948033105d693b0f5d3097a2fa5f13134ffb2fb5ce746b"
+        }
+      },
+      "also_stated_by": [],
+      "rule": {
+        "kind": "forbid_pattern",
+        "params": {
+          "pattern_kind": "ast_grep",
+          "pattern": "// @g8.capability(name = \"$NAME\", $$$REST)",
+          "description": "A Capability annotation's name value must never contain '::'. The `<project>::<name>` cross-reference notation is space-scoped-query syntax only; annotations carry bare kebab-case names, and projects are inferred from Project.root_path at extraction time.",
+          "post_check": "captured $NAME does not match the substring '::'"
+        }
+      },
+      "scope": {
+        "crates": [
+          "g8-extractor"
+        ],
+        "paths": [
+          "crates/**/src/**/*.rs"
+        ],
+        "note": "scope.paths is intentionally workspace-wide: Capability annotations (the content checked) may be declared in any of the six crates' source. scope.crates names g8-extractor because that is the crate whose parser/validator a coding agent edits to change how this check runs. Fixed per review DEF-06: dropped the erroneous '*.md' glob present in the original draft -- capability annotations never appear in Markdown (they are code-level magic-comments per D1/D2), so it was overreach, not just an omission."
+      },
+      "convergence_test": {
+        "id": "conv-d3-01",
+        "check": "ast-grep --pattern '// @g8.capability(name = \"$NAME\", $$$REST)' crates/**/*; collect all captured $NAME values",
+        "fails_when": "any captured capability name contains '::'"
+      },
+      "checker": {
+        "mode": "typed",
+        "checks": [
+          {
+            "backend": "ast_grep_no_match",
+            "args": {
+              "patterns": [
+                "// @g8.capability(name = \"$NAME\", $$$REST)"
+              ],
+              "lang": "rust",
+              "glob": [
+                "crates/**/src/**/*.rs"
+              ],
+              "exclude_glob": [],
+              "capture_predicate": {
+                "capture": "NAME",
+                "forbidden_substring": "::"
+              }
+            }
+          }
+        ]
+      },
+      "signal": {
+        "gate": "g8-conflict",
+        "conflict_kind": "GovernanceViolation",
+        "wiring": "compiled_intent_extension",
+        "advisory": false
+      }
+    },
+    {
+      "id": "OBL-D3-02",
+      "descends_from": {
+        "decision": "D3",
+        "title": "Multi-project topology: per-project store + space.toml federation, with cross-store ATTACH for queries.",
+        "why": "R4 §6 Risk 5 documents that SQLite's `ATTACH DATABASE` is the cleanest pattern for cross-store reads. R1 §8.1 Q1–Q4 explicitly defer these decisions to the architect; the per-project default + opt-in space is the lightest path that supports the single-repo and multi-repo use cases without forcing one to behave like the other. Forcing a global store (`~/.g8/projects/...`) couples the user's local fs to `g8`'s data model — bad.",
+        "why_kind": "explicit_rationale",
+        "source": {
+          "file": "SPEC.md",
+          "lines": "L159-197",
+          "sha256": "49e825a4d1a47f076d948033105d693b0f5d3097a2fa5f13134ffb2fb5ce746b"
+        }
+      },
+      "also_stated_by": [],
+      "rule": {
+        "kind": "require_pattern",
+        "params": {
+          "check_kind": "filesystem_shape",
+          "rules": [
+            "Every g8-managed project directory contains .g8/store.db after `g8 init`.",
+            "If a ConvergenceSpace is declared, the space root's .g8/ contains both space.toml and its own store.db.",
+            "space.toml lists members as relative-or-absolute project directory paths."
+          ]
+        }
+      },
+      "scope": {
+        "crates": [
+          "g8-store",
+          "g8"
+        ],
+        "paths": [
+          "crates/g8-store/src/**",
+          "crates/g8/src/**"
+        ]
+      },
+      "convergence_test": {
+        "id": "conv-d3-02",
+        "check": "in a scratch dir: run `g8 init`, assert -f .g8/store.db; run `g8 space add <member>`, assert -f .g8/space.toml at space root and the member path is listed in it",
+        "fails_when": "either file is missing after the corresponding command, or space.toml's members list omits an added project"
+      },
+      "checker": {
+        "mode": "typed",
+        "checks": [
+          {
+            "backend": "fixture_integration_test",
+            "args": {
+              "setup": [
+                {
+                  "args": [
+                    "init"
+                  ],
+                  "env": {}
+                },
+                {
+                  "args": [
+                    "space",
+                    "add",
+                    "../member"
+                  ],
+                  "env": {}
+                }
+              ],
+              "assertions": [
+                {
+                  "kind": "file_exists",
+                  "path": ".g8/store.db"
+                },
+                {
+                  "kind": "file_exists",
+                  "path": ".g8/space.toml"
+                },
+                {
+                  "kind": "file_contains",
+                  "path": ".g8/space.toml",
+                  "needle": "member"
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "signal": {
+        "gate": "g8-conflict",
+        "conflict_kind": "GovernanceViolation",
+        "wiring": "compiled_intent_extension",
+        "advisory": false
+      }
+    },
+    {
+      "id": "OBL-D4-01",
+      "descends_from": {
+        "decision": "D4",
+        "title": "AGENTS.md / CLAUDE.md / *.g8.md ingestion.",
+        "why": "R3's §5.1 and §5.5 recommendations land on a single Markdown-heading scanner; R3 §2.4 confirms the precedence model from the AGENTS.md spec; R3 §6.2 explicitly forbids LLM-generation of these files, so we only ever *read* them.",
+        "why_kind": "explicit_rationale",
+        "source": {
+          "file": "SPEC.md",
+          "lines": "L199-239",
+          "sha256": "49e825a4d1a47f076d948033105d693b0f5d3097a2fa5f13134ffb2fb5ce746b"
+        }
+      },
+      "also_stated_by": [],
+      "rule": {
+        "kind": "require_pattern",
+        "params": {
+          "detection": "walk via the `ignore` crate; exact filenames AGENTS.md, CLAUDE.md; glob *.g8.md at any depth",
+          "section_kind_table": [
+            {
+              "heading_regex": "^architecture$|^design$|^overview$",
+              "annotation": "Intent{kind: ArchitecturalScope}"
+            },
+            {
+              "heading_regex": "^boundaries$|^never do$|^constraints$",
+              "annotation": "Intent{kind: Boundary}"
+            },
+            {
+              "heading_regex": "^commands$|^build$|^test$|^testing$",
+              "annotation": "Intent{kind: Operational} (deprioritized in planner queries)"
+            },
+            {
+              "heading_regex": "^stack$|^dependencies$",
+              "annotation": "Intent{kind: TechStack}"
+            },
+            {
+              "heading_regex": "^owner$|^ownership$",
+              "annotation": "Owner (attached to enclosing Intent)"
+            },
+            {
+              "heading_regex": "^parked ideas$|^deferred$",
+              "annotation": "Plan{status: Parked}"
+            },
+            {
+              "heading_regex": "^active plans$|^in flight$",
+              "annotation": "read-only, ignored by extractor"
+            },
+            {
+              "heading_regex": "^decisions$|^architectural decisions$",
+              "annotation": "Decision"
+            },
+            {
+              "heading_regex": "^intent$",
+              "annotation": "Intent{kind: ExplicitIntent}"
+            },
+            {
+              "heading_regex": "(anything else)",
+              "annotation": "Intent{kind: Unclassified}"
+            }
+          ],
+          "precedence": "deeper file wins; store records scope_depth; planner query = ORDER BY scope_depth DESC LIMIT 1"
+        }
+      },
+      "scope": {
+        "crates": [
+          "g8-extractor"
+        ],
+        "paths": [
+          "crates/g8-extractor/src/**"
+        ]
+      },
+      "convergence_test": {
+        "id": "conv-d4-01",
+        "check": "run g8-extractor against a fixture tree with a root AGENTS.md (one heading per table row) and a nested src/auth/AGENTS.md overriding one heading; inspect produced Intent/Owner/Plan/Decision rows",
+        "fails_when": "any heading classifies to the wrong AnnotationKind/IntentKind, or the shallower file's Intent is selected over the deeper file's for the overlapping scope"
+      },
+      "checker": {
+        "mode": "typed",
+        "checks": [
+          {
+            "backend": "fixture_integration_test",
+            "args": {
+              "seed_files": [
+                {
+                  "path": "AGENTS.md",
+                  "content": "# Boundaries\n\nRoot-level boundary text.\n"
+                },
+                {
+                  "path": "src/auth/AGENTS.md",
+                  "content": "# Boundaries\n\nAuth-specific boundary text.\n"
+                }
+              ],
+              "setup": [
+                {
+                  "args": [
+                    "init"
+                  ],
+                  "env": {}
+                },
+                {
+                  "args": [
+                    "scan",
+                    "--output",
+                    "json"
+                  ],
+                  "env": {}
+                },
+                {
+                  "args": [
+                    "query",
+                    "intents --path={{fixture_dir}}/src/auth",
+                    "--output",
+                    "json"
+                  ],
+                  "env": {}
+                }
+              ],
+              "assertions": [
+                {
+                  "kind": "json_field",
+                  "from_step": 1,
+                  "path": "$.inserted_intents",
+                  "equals": 2
+                },
+                {
+                  "kind": "json_path_non_empty",
+                  "from_step": 2,
+                  "path": "$.data"
+                },
+                {
+                  "kind": "json_field",
+                  "from_step": 2,
+                  "path": "$.data[0].description",
+                  "equals": "Auth-specific boundary text."
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "signal": {
+        "gate": "g8-conflict",
+        "conflict_kind": "GovernanceViolation",
+        "wiring": "compiled_intent_extension",
+        "advisory": false
+      }
+    },
+    {
+      "id": "OBL-D4-02",
+      "descends_from": {
+        "decision": "D4",
+        "title": "AGENTS.md / CLAUDE.md / *.g8.md ingestion.",
+        "why": "R3's §5.1 and §5.5 recommendations land on a single Markdown-heading scanner; R3 §2.4 confirms the precedence model from the AGENTS.md spec; R3 §6.2 explicitly forbids LLM-generation of these files, so we only ever *read* them.",
+        "why_kind": "explicit_rationale",
+        "source": {
+          "file": "SPEC.md",
+          "lines": "L199-239",
+          "sha256": "49e825a4d1a47f076d948033105d693b0f5d3097a2fa5f13134ffb2fb5ce746b"
+        }
+      },
+      "also_stated_by": [
+        "P7"
+      ],
+      "rule": {
+        "kind": "require_pattern",
+        "params": {
+          "requirements": [
+            ".g8/INTENT_SUMMARY.md must begin with an <!-- AUTO-GENERATED --> header.",
+            "g8-extractor's ignore set must explicitly include .g8/INTENT_SUMMARY.md (never parsed as an ingestible source).",
+            "`g8 status` (and implicitly `g8 scan`) is the only writer, always regenerating from the fixed template (ARCHITECTURE.md 10.4)."
+          ]
+        }
+      },
+      "scope": {
+        "crates": [
+          "g8-extractor",
+          "g8"
+        ],
+        "paths": [
+          "crates/g8-extractor/src/**",
+          "crates/g8/src/**"
+        ]
+      },
+      "convergence_test": {
+        "id": "conv-d4-02",
+        "check": "run `g8 status` in a fixture repo; assert head of .g8/INTENT_SUMMARY.md == '<!-- AUTO-GENERATED -->'; run `g8 scan`; assert no Annotation row's source_file == '.g8/INTENT_SUMMARY.md'",
+        "fails_when": "the header is missing, or any store row's source_file points at INTENT_SUMMARY.md"
+      },
+      "checker": {
+        "mode": "typed",
+        "checks": [
+          {
+            "backend": "fixture_integration_test",
+            "args": {
+              "setup": [
+                {
+                  "args": [
+                    "init"
+                  ],
+                  "env": {}
+                },
+                {
+                  "args": [
+                    "status"
+                  ],
+                  "env": {}
+                }
+              ],
+              "assertions": [
+                {
+                  "kind": "file_header_equals",
+                  "path": ".g8/INTENT_SUMMARY.md",
+                  "expected_prefix": "<!-- AUTO-GENERATED"
+                },
+                {
+                  "kind": "no_annotation_source_file",
+                  "basename": "INTENT_SUMMARY.md"
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "signal": {
+        "gate": "g8-conflict",
+        "conflict_kind": "GovernanceViolation",
+        "wiring": "compiled_intent_extension",
+        "advisory": false
+      }
+    },
+    {
+      "id": "OBL-D5-01",
+      "descends_from": {
+        "decision": "D5",
+        "title": "StoreConnection trait + rusqlite primary, Turso swap planned.",
+        "why": "R4 §2 picks `rusqlite` over Turso decisively (Turso is BETA, async-only, 27–45 MB binary bloat). R4 §6 Risk 4 commits to the trait abstraction precisely so the swap is reversible.",
+        "why_kind": "explicit_rationale",
+        "source": {
+          "file": "SPEC.md",
+          "lines": "L241-245",
+          "sha256": "49e825a4d1a47f076d948033105d693b0f5d3097a2fa5f13134ffb2fb5ce746b"
+        }
+      },
+      "also_stated_by": [],
+      "rule": {
+        "kind": "forbid_pattern",
+        "params": {
+          "pattern_kind": "ast_grep",
+          "pattern": "RusqliteStore",
+          "description": "g8-planner and g8-conflict must reference the store only through the StoreConnection trait, never the concrete RusqliteStore type, so a future TursoStore can plug in without touching either crate.",
+          "allowed_glob": [
+            "crates/g8-store/src/**",
+            "crates/g8/src/**"
+          ]
+        }
+      },
+      "scope": {
+        "crates": [
+          "g8-planner",
+          "g8-conflict"
+        ],
+        "paths": [
+          "crates/g8-planner/src/**",
+          "crates/g8-conflict/src/**"
+        ]
+      },
+      "convergence_test": {
+        "id": "conv-d5-01",
+        "check": "ast-grep --lang rust --pattern 'RusqliteStore' crates/g8-planner/src/**/*.rs crates/g8-conflict/src/**/*.rs",
+        "fails_when": "any match found in non-test production code of either crate"
+      },
+      "checker": {
+        "mode": "typed",
+        "checks": [
+          {
+            "backend": "ast_grep_no_match",
+            "args": {
+              "patterns": [
+                "RusqliteStore"
+              ],
+              "lang": "rust",
+              "glob": [
+                "crates/g8-planner/src/**",
+                "crates/g8-conflict/src/**"
+              ],
+              "exclude_glob": [],
+              "capture_predicate": null
+            }
+          }
+        ]
+      },
+      "signal": {
+        "gate": "g8-conflict",
+        "conflict_kind": "GovernanceViolation",
+        "wiring": "compiled_intent_extension",
+        "advisory": false
+      }
+    },
+    {
+      "id": "OBL-D6-01",
+      "descends_from": {
+        "decision": "D6",
+        "title": "`planner_intent_check` composite query: six-CTE SQLite shape as defined in R4 §4.",
+        "why": "R4 §4 provides the full SQL; R1 D2 commits to the principle (\"Cuts latency, eliminates partial-state bugs, makes the decision atomic\"). Composite-queries-not-verb-chains is principle 2.",
+        "why_kind": "explicit_rationale",
+        "source": {
+          "file": "SPEC.md",
+          "lines": "L247-251",
+          "sha256": "49e825a4d1a47f076d948033105d693b0f5d3097a2fa5f13134ffb2fb5ce746b"
+        }
+      },
+      "also_stated_by": [
+        "P2",
+        "CLAUDE.md:composite-queries-not-verb-chains"
+      ],
+      "rule": {
+        "kind": "require_pattern",
+        "params": {
+          "function": "StoreConnection::planner_intent_check(&self, draft: &PlanDraft) -> Result<RawIntentCheckPayload>",
+          "returned_json_columns": [
+            "existing_matches",
+            "budget",
+            "bottlenecks",
+            "drift_hints",
+            "intent_overlaps",
+            "parked_ideas"
+          ],
+          "transaction_shape": "exactly one read transaction per call; g8-planner must not issue additional separate StoreConnection queries to assemble a FitReport for the same plan_check invocation"
+        }
+      },
+      "scope": {
+        "crates": [
+          "g8-store",
+          "g8-planner"
+        ],
+        "paths": [
+          "crates/g8-store/src/queries.rs",
+          "crates/g8-planner/src/lib.rs"
+        ]
+      },
+      "convergence_test": {
+        "id": "conv-d6-01",
+        "check": "grep/ast-grep count of StoreConnection trait-method calls inside Planner::plan_check's call graph for a single invocation; inspect queries.rs's SQL for the six named JSON columns",
+        "fails_when": "plan_check issues more than one StoreConnection query, or the composite query is missing one of the six columns"
+      },
+      "checker": {
+        "mode": "typed",
+        "checks": [
+          {
+            "backend": "ast_grep_match_count",
+            "args": {
+              "pattern": "store.$METHOD($$$ARGS)",
+              "lang": "rust",
+              "glob": [
+                "crates/g8-planner/src/lib.rs"
+              ],
+              "scope": {
+                "function": "plan_check"
+              },
+              "expected": {
+                "kind": "exactly",
+                "value": 1
+              },
+              "capture_equals": [
+                "METHOD",
+                "planner_intent_check"
+              ]
+            }
+          },
+          {
+            "backend": "rg_match_count",
+            "args": {
+              "pattern": "pub\\s+(existing_matches|budget|bottlenecks|drift_hints|intent_overlaps|parked_ideas):\\s*serde_json::Value",
+              "glob": [
+                "crates/g8-store/src/store_impl.rs"
+              ],
+              "expected": {
+                "kind": "exactly",
+                "value": 6
+              }
+            }
+          },
+          {
+            "backend": "rg_match_count",
+            "args": {
+              "pattern": "^\\s*(existing_matches|budget|bottlenecks|drift_hints|intent_overlaps|parked_ideas)\\s+AS",
+              "glob": [
+                "crates/g8-store/src/store_impl.rs"
+              ],
+              "expected": {
+                "kind": "exactly",
+                "value": 6
+              }
+            }
+          },
+          {
+            "backend": "rg_match_count",
+            "args": {
+              "pattern": "\\)\\s*AS\\s+(existing_matches|budget|bottlenecks|drift_hints|intent_overlaps|parked_ideas)\\b",
+              "glob": [
+                "crates/g8-store/src/store_impl.rs"
+              ],
+              "expected": {
+                "kind": "exactly",
+                "value": 6
+              }
+            }
+          }
+        ]
+      },
+      "signal": {
+        "gate": "g8-conflict",
+        "conflict_kind": "GovernanceViolation",
+        "wiring": "compiled_intent_extension",
+        "advisory": false
+      }
+    },
+    {
+      "id": "OBL-D6-02",
+      "descends_from": {
+        "decision": "D6",
+        "title": "`planner_intent_check` composite query: six-CTE SQLite shape as defined in R4 §4.",
+        "why": "R4 §4 provides the full SQL; R1 D2 commits to the principle (\"Cuts latency, eliminates partial-state bugs, makes the decision atomic\"). Composite-queries-not-verb-chains is principle 2.",
+        "why_kind": "explicit_rationale",
+        "source": {
+          "file": "SPEC.md",
+          "lines": "L247-251",
+          "sha256": "49e825a4d1a47f076d948033105d693b0f5d3097a2fa5f13134ffb2fb5ce746b"
+        }
+      },
+      "also_stated_by": [
+        "D2 (Capability consumes/produces, SPEC.md L98)",
+        "G1 (Capability glossary entry, SPEC.md L98)"
+      ],
+      "rule": {
+        "kind": "require_pattern",
+        "params": {
+          "column": "drift_hints",
+          "basis": "inferred_from_name_and_context — NOT a verbatim SPEC statement, labeled as inference per review instruction #6",
+          "inference": "D6's locked text (SPEC.md L249) names drift_hints as one of six planner_intent_check composite-query return columns. SPEC.md never states drift_hints' internal computation. This obligation infers -- from the column's name and its co-listing alongside existing_matches/bottlenecks/parked_ideas (all planner fit-check informational surfaces meant to warn a plan-drafting agent before commitment) -- that drift_hints is meant to surface the same declared-vs-wired-edge gap that graph-tool's codegraph_drift_edges verb detects (drift_edges.surql:20-71, reproduced deterministically and confirmed correct by V2/T3 + V2v), applied to g8's own Capability.consumes/produces fields (D2/SPEC.md L98).",
+          "predicate": "declared consumes/produces (from a Capability annotation's consumes/produces lists) with no corresponding resolved wiring — mirrors drift_edges.surql:61-71's WHERE filter (declared>0 AND resolved=0 on either side), reproduced deterministically per V2/T3.",
+          "caveat": "g8's own internal representation of 'this capability's declared consumes resolved to an actual producer' (g8's analog of graph-tool's code_edge table) is NOT confirmed anywhere in the evidence gathered for this compile -- neither E1's original scope (SPEC.md + g8-core/model.rs + conflict.rs + plan.rs) nor this session's additional reads (ARCHITECTURE.md, store_impl.rs) established the exact table/column g8-store uses for this. This obligation's convergence_test is therefore necessarily behavioral (black-box, via the CLI) rather than a direct grep, unlike most other obligations in this set. See OQ-09."
+        }
+      },
+      "scope": {
+        "crates": [
+          "g8-store",
+          "g8-planner"
+        ],
+        "paths": [
+          "crates/g8-store/src/queries.rs",
+          "crates/g8-planner/src/lib.rs"
+        ]
+      },
+      "convergence_test": {
+        "id": "conv-d6-02",
+        "check": "construct a fixture Capability with a declared consumes entry and deliberately zero resolved wiring for it; run `g8 scan` then `g8 plan new` against it; inspect the FitReport.drift_hints field of the resulting plan_check JSON output",
+        "fails_when": "drift_hints does not surface the fixture's unresolved consumes declaration"
+      },
+      "checker": {
+        "mode": "typed",
+        "checks": [
+          {
+            "backend": "fixture_integration_test",
+            "args": {
+              "setup": [
+                {
+                  "args": [
+                    "init"
+                  ],
+                  "env": {}
+                },
+                {
+                  "args": [
+                    "substrate",
+                    "add",
+                    "fixture-substrate",
+                    "--stale-days",
+                    "3"
+                  ],
+                  "env": {}
+                },
+                {
+                  "args": [
+                    "plan",
+                    "new",
+                    "fixture-plan-1",
+                    "--substrate",
+                    "fixture-substrate",
+                    "--dispatch"
+                  ],
+                  "env": {}
+                },
+                {
+                  "args": [
+                    "plan",
+                    "new",
+                    "fixture-plan-2",
+                    "--json"
+                  ],
+                  "env": {}
+                }
+              ],
+              "assertions": [
+                {
+                  "kind": "json_field",
+                  "from_step": 3,
+                  "path": "$.drift_hints",
+                  "equals": []
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "signal": {
+        "gate": "codegraph_drift_edges",
+        "conflict_kind": null,
+        "wiring": "compiled_intent_extension",
+        "advisory": true
+      }
+    },
+    {
+      "id": "OBL-D7-01",
+      "descends_from": {
+        "decision": "D7",
+        "title": "CLI surface: locked in ARCHITECTURE.md §9.",
+        "why": "**Locked:** Full `clap` subcommand tree with all flags is defined in ARCHITECTURE.md §9. Top-level subcommands: `init | scan | plan {new,list,show,park,promote} | status | check | merge | query | space {add,remove,list} | link | substrate {add,list}`. Two output modes (uniform across all commands): `--output pretty` (default) and `--output json`. Pretty output is human-readable Markdown; JSON output is stable and versioned with `\"g8_version\": \"0.1.0\"` in every payload.",
+        "why_kind": "statement_only",
+        "source": {
+          "file": "SPEC.md",
+          "lines": "L253-258",
+          "sha256": "49e825a4d1a47f076d948033105d693b0f5d3097a2fa5f13134ffb2fb5ce746b"
+        }
+      },
+      "also_stated_by": [],
+      "rule": {
+        "kind": "require_pattern",
+        "params": {
+          "top_level_subcommands": [
+            "init",
+            "scan",
+            "plan",
+            "status",
+            "check",
+            "merge",
+            "query",
+            "space",
+            "link",
+            "substrate"
+          ],
+          "plan_subcommands": [
+            "new",
+            "list",
+            "show",
+            "park",
+            "promote"
+          ],
+          "space_subcommands": [
+            "add",
+            "remove",
+            "list"
+          ],
+          "substrate_subcommands": [
+            "add",
+            "list"
+          ],
+          "output_modes": [
+            "pretty",
+            "json"
+          ],
+          "json_versioning_key": "g8_version"
+        }
+      },
+      "scope": {
+        "crates": [
+          "g8"
+        ],
+        "paths": [
+          "crates/g8/src/**"
+        ]
+      },
+      "convergence_test": {
+        "id": "conv-d7-01",
+        "check": "run `g8 --help` (or introspect the clap Commands enum via ast-grep) and diff the subcommand tree against the locked list; run one command with --output pretty and --output json",
+        "fails_when": "the subcommand tree misses/adds a top-level entry vs. the locked list, either --output mode is unsupported, or g8_version is absent from a json payload"
+      },
+      "checker": {
+        "mode": "typed",
+        "checks": [
+          {
+            "backend": "fixture_integration_test",
+            "args": {
+              "setup": [
+                {
+                  "args": [
+                    "--help"
+                  ],
+                  "env": {},
+                  "binary": {
+                    "kind": "cargo_run",
+                    "package": "g8",
+                    "features": []
+                  }
+                },
+                {
+                  "args": [
+                    "--help"
+                  ],
+                  "env": {},
+                  "binary": {
+                    "kind": "cargo_run",
+                    "package": "g8",
+                    "features": [
+                      "serve"
+                    ]
+                  }
+                }
+              ],
+              "assertions": [
+                {
+                  "kind": "stdout_contains_all",
+                  "from_step": 0,
+                  "needles": [
+                    "init",
+                    "scan",
+                    "plan",
+                    "status",
+                    "check",
+                    "merge",
+                    "query",
+                    "space",
+                    "link",
+                    "substrate"
+                  ]
+                },
+                {
+                  "kind": "stdout_not_contains",
+                  "from_step": 0,
+                  "needle": "serve"
+                },
+                {
+                  "kind": "stdout_contains_all",
+                  "from_step": 1,
+                  "needles": [
+                    "init",
+                    "scan",
+                    "plan",
+                    "status",
+                    "check",
+                    "merge",
+                    "query",
+                    "space",
+                    "link",
+                    "substrate",
+                    "serve"
+                  ]
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "signal": {
+        "gate": "g8-conflict",
+        "conflict_kind": "GovernanceViolation",
+        "wiring": "compiled_intent_extension",
+        "advisory": false
+      },
+      "known_live_violation": "As of this compile, this obligation's convergence_test FAILS against the real repo: `g8` has an 11th top-level subcommand, `serve` (cli.rs:81, main.rs:96), beyond the 10 locked in SPEC.md D7 (L255-258) and enumerated in this obligation's rule.params.top_level_subcommands. ARCHITECTURE.md 9 (the doc D7 itself defers to as authoritative, 'ARCHITECTURE.md 9. This is the v0.1 LOCKED CLI', L1470) DOES list `serve` (L1556) but explicitly annotates it 'a post-v0.1 addition' (L1564) -- so even the doc D7 defers to agrees `serve` is out of v0.1 scope. See OQ-08; also see OBL-N5-01.known_live_violation."
+    },
+    {
+      "id": "OBL-D8-01",
+      "descends_from": {
+        "decision": "D8",
+        "title": "Crate graph: six crates.",
+        "why": "**Locked:** Workspace members: g8-core (no deps on other workspace crates, used by all), g8-store (deps: g8-core), g8-extractor (deps: g8-core), g8-planner (deps: g8-core, g8-store), g8-conflict (deps: g8-core, g8-store), g8 (deps: all of the above). This is a strict DAG with `g8-core` as the root and `g8` as the only sink. No cycles, no diamonds.",
+        "why_kind": "statement_only",
+        "source": {
+          "file": "SPEC.md",
+          "lines": "L260-274",
+          "sha256": "49e825a4d1a47f076d948033105d693b0f5d3097a2fa5f13134ffb2fb5ce746b"
+        }
+      },
+      "also_stated_by": [
+        "CLAUDE.md:single-CLI-binary-entry-point",
+        "CLAUDE.md:never-add-a-second-binary"
+      ],
+      "rule": {
+        "kind": "require_edge",
+        "params": {
+          "required_edges": [
+            {
+              "from": "g8-store",
+              "to": "g8-core"
+            },
+            {
+              "from": "g8-extractor",
+              "to": "g8-core"
+            },
+            {
+              "from": "g8-planner",
+              "to": "g8-core"
+            },
+            {
+              "from": "g8-planner",
+              "to": "g8-store"
+            },
+            {
+              "from": "g8-conflict",
+              "to": "g8-core"
+            },
+            {
+              "from": "g8-conflict",
+              "to": "g8-store"
+            },
+            {
+              "from": "g8",
+              "to": "g8-core"
+            },
+            {
+              "from": "g8",
+              "to": "g8-store"
+            },
+            {
+              "from": "g8",
+              "to": "g8-extractor"
+            },
+            {
+              "from": "g8",
+              "to": "g8-planner"
+            },
+            {
+              "from": "g8",
+              "to": "g8-conflict"
+            }
+          ],
+          "forbidden": "any workspace-internal dependency edge not in required_edges (e.g. g8-core depending on any other workspace crate; g8-store/-extractor/-planner/-conflict depending on g8; any cycle)",
+          "bin_targets": {
+            "count": 1,
+            "crate": "g8"
+          }
+        }
+      },
+      "scope": {
+        "crates": [
+          "g8-core",
+          "g8-store",
+          "g8-extractor",
+          "g8-planner",
+          "g8-conflict",
+          "g8"
+        ],
+        "paths": [
+          "Cargo.toml",
+          "crates/*/Cargo.toml"
+        ]
+      },
+      "convergence_test": {
+        "id": "conv-d8-01",
+        "check": "cargo metadata --format-version1 | jq the workspace members' dependencies and [[bin]] targets; diff the resulting dependency-edge set against required_edges (must be equal, not just a superset); count [[bin]] targets workspace-wide",
+        "fails_when": "the edge set differs from required_edges in either direction, or the total [[bin]] target count != 1, or that one bin's crate != g8"
+      },
+      "checker": {
+        "mode": "typed",
+        "checks": [
+          {
+            "backend": "cargo_metadata_dep_graph",
+            "args": {
+              "required_edges": [
+                [
+                  "g8-store",
+                  "g8-core"
+                ],
+                [
+                  "g8-extractor",
+                  "g8-core"
+                ],
+                [
+                  "g8-planner",
+                  "g8-core"
+                ],
+                [
+                  "g8-planner",
+                  "g8-store"
+                ],
+                [
+                  "g8-conflict",
+                  "g8-core"
+                ],
+                [
+                  "g8-conflict",
+                  "g8-store"
+                ],
+                [
+                  "g8",
+                  "g8-core"
+                ],
+                [
+                  "g8",
+                  "g8-store"
+                ],
+                [
+                  "g8",
+                  "g8-extractor"
+                ],
+                [
+                  "g8",
+                  "g8-planner"
+                ],
+                [
+                  "g8",
+                  "g8-conflict"
+                ],
+                [
+                  "g8",
+                  "g8-obligations"
+                ],
+                [
+                  "g8-obligations",
+                  "g8-core"
+                ],
+                [
+                  "g8-obligations",
+                  "g8-store"
+                ]
+              ],
+              "forbid_extra_edges": true,
+              "expected_bin_targets": [
+                [
+                  "g8",
+                  1
+                ]
+              ]
+            }
+          }
+        ]
+      },
+      "signal": {
+        "gate": "g8-conflict",
+        "conflict_kind": "GovernanceViolation",
+        "wiring": "compiled_intent_extension",
+        "advisory": false
+      }
+    },
+    {
+      "id": "OBL-D9-01",
+      "descends_from": {
+        "decision": "D9",
+        "title": "AUDIT-before-enforce ergonomics for `g8 init`.",
+        "why": "The AUDIT-before-enforce pattern (`r1 §6.7, E10`) compose cleanly.",
+        "why_kind": "explicit_rationale",
+        "source": {
+          "file": "SPEC.md",
+          "lines": "L276-293",
+          "sha256": "49e825a4d1a47f076d948033105d693b0f5d3097a2fa5f13134ffb2fb5ce746b"
+        }
+      },
+      "also_stated_by": [
+        "P1",
+        "P8"
+      ],
+      "rule": {
+        "kind": "require_flag_gate",
+        "params": {
+          "flag": "enforcement",
+          "file": ".g8/config.toml",
+          "default_value": "off",
+          "on_value": "on",
+          "flip_commands": [
+            "g8 init --enforce",
+            "g8 config set enforcement on"
+          ],
+          "idempotency": "re-running `g8 init` re-applies migrations (no-op if already applied), refreshes the AUDIT report, and leaves enforcement untouched"
+        }
+      },
+      "scope": {
+        "crates": [
+          "g8",
+          "g8-store"
+        ],
+        "paths": [
+          "crates/g8/src/**",
+          "crates/g8-store/src/**"
+        ]
+      },
+      "convergence_test": {
+        "id": "conv-d9-01",
+        "check": "in a scratch dir: run `g8 init`; assert .g8/config.toml has enforcement=\"off\"; run `g8 check --json`; assert enforcement_disabled / exit_code 0; run `g8 init` again; assert enforcement is still \"off\"; run `g8 init --enforce`; assert enforcement flips to \"on\"",
+        "fails_when": "the default after first init is not \"off\", a second `g8 init` changes an already-set enforcement value, or --enforce fails to flip it to \"on\""
+      },
+      "checker": {
+        "mode": "typed",
+        "checks": [
+          {
+            "backend": "fixture_integration_test",
+            "args": {
+              "setup": [
+                {
+                  "args": [
+                    "init"
+                  ],
+                  "env": {}
+                }
+              ],
+              "assertions": [
+                {
+                  "kind": "file_contains",
+                  "path": ".g8/config.toml",
+                  "needle": "enforcement = \"off\""
+                }
+              ]
+            }
+          },
+          {
+            "backend": "fixture_integration_test",
+            "args": {
+              "setup": [
+                {
+                  "args": [
+                    "init"
+                  ],
+                  "env": {}
+                },
+                {
+                  "args": [
+                    "check",
+                    "--json"
+                  ],
+                  "env": {}
+                }
+              ],
+              "assertions": [
+                {
+                  "kind": "exit_code",
+                  "from_step": 1,
+                  "equals": 0
+                },
+                {
+                  "kind": "json_field",
+                  "from_step": 1,
+                  "path": "$.enforcement_disabled",
+                  "equals": true
+                }
+              ]
+            }
+          },
+          {
+            "backend": "fixture_integration_test",
+            "args": {
+              "setup": [
+                {
+                  "args": [
+                    "init"
+                  ],
+                  "env": {}
+                },
+                {
+                  "args": [
+                    "init"
+                  ],
+                  "env": {}
+                }
+              ],
+              "assertions": [
+                {
+                  "kind": "file_contains",
+                  "path": ".g8/config.toml",
+                  "needle": "enforcement = \"off\""
+                }
+              ]
+            }
+          },
+          {
+            "backend": "fixture_integration_test",
+            "args": {
+              "setup": [
+                {
+                  "args": [
+                    "init"
+                  ],
+                  "env": {}
+                },
+                {
+                  "args": [
+                    "init",
+                    "--enforce"
+                  ],
+                  "env": {}
+                }
+              ],
+              "assertions": [
+                {
+                  "kind": "file_contains",
+                  "path": ".g8/config.toml",
+                  "needle": "enforcement = \"on\""
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "signal": {
+        "gate": "g8-conflict",
+        "conflict_kind": "GovernanceViolation",
+        "wiring": "compiled_intent_extension",
+        "advisory": false
+      }
+    },
+    {
+      "id": "OBL-D10-01",
+      "descends_from": {
+        "decision": "D10",
+        "title": "In-loop validator: ship `g8 check --json` with a stable JSON contract.",
+        "why": "If anyone wires `g8` into a harness, they get a drop-in. Stable contracts are cheap to maintain and worth shipping early.",
+        "why_kind": "explicit_rationale",
+        "source": {
+          "file": "SPEC.md",
+          "lines": "L295-328",
+          "sha256": "49e825a4d1a47f076d948033105d693b0f5d3097a2fa5f13134ffb2fb5ce746b"
+        }
+      },
+      "also_stated_by": [
+        "CLAUDE.md:output-contract"
+      ],
+      "rule": {
+        "kind": "require_output_contract",
+        "params": {
+          "keys": [
+            "g8_version",
+            "errors",
+            "exit_code"
+          ],
+          "error_item_keys": [
+            "capability",
+            "file",
+            "line",
+            "reason"
+          ],
+          "reason_vocabulary": [
+            "no_matching_convergence_test",
+            "stub_expired",
+            "stub_missing_since",
+            "duplicate_capability_name",
+            "invalid_root",
+            "invalid_checker_json",
+            "enforcement_disabled"
+          ],
+          "exit_codes": {
+            "0": "no errors, or enforcement disabled",
+            "1": "errors found",
+            "2": "internal failure"
+          },
+          "always_valid_json_on_stdout": true,
+          "human_text_stream": "stderr"
+        }
+      },
+      "scope": {
+        "crates": [
+          "g8"
+        ],
+        "paths": [
+          "crates/g8/src/render/json.rs"
+        ]
+      },
+      "convergence_test": {
+        "id": "conv-d10-01",
+        "check": "run `g8 check --json` in (a) a clean store and (b) a store fixture with one known-bad capability; parse stdout as JSON both times",
+        "fails_when": "stdout is not valid JSON, a required key is missing, exit_code doesn't match the errors array, or a reason value falls outside reason_vocabulary"
+      },
+      "checker": {
+        "mode": "typed",
+        "checks": [
+          {
+            "backend": "g8_check_contract",
+            "args": {
+              "scenarios": [
+                "clean_store",
+                "known_bad_capability_fixture"
+              ]
+            }
+          }
+        ]
+      },
+      "signal": {
+        "gate": "g8-conflict",
+        "conflict_kind": "GovernanceViolation",
+        "wiring": "compiled_intent_extension",
+        "advisory": false
+      }
+    },
+    {
+      "id": "OBL-D11-01",
+      "descends_from": {
+        "decision": "D11",
+        "title": "Deterministic vs non-deterministic zones (the M1 principle).",
+        "why": "The value of the protocol is in the deterministic gate, not the drafting layer. Mixing zones inside one crate is the failure mode to avoid.",
+        "why_kind": "explicit_rationale",
+        "source": {
+          "file": "SPEC.md",
+          "lines": "L330-345",
+          "sha256": "49e825a4d1a47f076d948033105d693b0f5d3097a2fa5f13134ffb2fb5ce746b"
+        }
+      },
+      "also_stated_by": [
+        "P3",
+        "N3"
+      ],
+      "rule": {
+        "kind": "forbid_crate_zone_mix",
+        "params": {
+          "zone_table": {
+            "g8-core": "DETERMINISTIC",
+            "g8-extractor": "DETERMINISTIC",
+            "g8-store": "DETERMINISTIC",
+            "g8-planner": "DETERMINISTIC",
+            "g8-conflict": "DETERMINISTIC",
+            "g8": "DETERMINISTIC"
+          },
+          "rule": "all six v0.1 workspace crates are 100% DETERMINISTIC; a non-deterministic zone (e.g. an LLM-drafting g8-plan-draft crate) may exist only as a new, separate workspace member producing a PlanDraft consumed unchanged by g8-planner::plan_check -- it must never be merged into one of the six existing crates.",
+          "v01_scope": "g8-plan-draft does not exist in v0.1; this obligation currently forbids any of the six crates from acquiring non-deterministic behavior, full stop.",
+          "tokio_note": "tokio's absence is not independently enforced by a dedicated rule (per review DEF-11's softer framing -- 'worth discussing', not 'must fix'): D5 already rejects Turso partly for being async-only, and the StoreConnection/RusqliteStore design is synchronous throughout, so tokio is not expected on the enforced synchronous path. Not equivalent to reqwest/rand-style non-determinism (mere presence of tokio primitives doesn't by itself imply non-deterministic behavior the way a network or LLM call does), so no blanket ban was added; flagged here for transparency rather than silently ignored."
+        }
+      },
+      "scope": {
+        "crates": [
+          "g8-core",
+          "g8-extractor",
+          "g8-store",
+          "g8-planner",
+          "g8-conflict",
+          "g8"
+        ],
+        "paths": [
+          "crates/*/src/**"
+        ]
+      },
+      "convergence_test": {
+        "id": "conv-d11-01",
+        "check": "grep the six crates for `async fn` combined with a network/LLM-client import; grep for control flow keyed on std::time::SystemTime::now() or unseeded RNG state (complements conv-d11-02's dependency-level check); ALSO grep for chrono::Local::now()/chrono::Utc::now() (fixed per review DEF-11 -- g8-store's own Cargo.toml already declares chrono as a real dependency, confirmed via V2/T1's cargo metadata baseline, and the original grep only matched the literal string std::time::SystemTime::now(), missing this)",
+        "fails_when": "any of the six crates imports a network or LLM client, or contains a code path whose control flow depends on wall-clock time or unseeded randomness"
+      },
+      "checker": {
+        "mode": "typed",
+        "checks": [
+          {
+            "backend": "rg_match_count",
+            "args": {
+              "pattern": "std::time::SystemTime::now\\(\\)",
+              "glob": [
+                "crates/*/src/**"
+              ],
+              "expected": {
+                "kind": "zero"
+              }
+            }
+          },
+          {
+            "backend": "rg_match_count",
+            "args": {
+              "pattern": "chrono::(Local|Utc)::now\\(\\)",
+              "glob": [
+                "crates/*/src/**"
+              ],
+              "expected": {
+                "kind": "zero"
+              }
+            }
+          }
+        ]
+      },
+      "signal": {
+        "gate": "g8-conflict",
+        "conflict_kind": "GovernanceViolation",
+        "wiring": "compiled_intent_extension",
+        "advisory": false
+      }
+    },
+    {
+      "id": "OBL-D11-02",
+      "descends_from": {
+        "decision": "D11",
+        "title": "Deterministic vs non-deterministic zones (the M1 principle).",
+        "why": "The value of the protocol is in the deterministic gate, not the drafting layer. Mixing zones inside one crate is the failure mode to avoid.",
+        "why_kind": "explicit_rationale",
+        "source": {
+          "file": "SPEC.md",
+          "lines": "L330-345",
+          "sha256": "49e825a4d1a47f076d948033105d693b0f5d3097a2fa5f13134ffb2fb5ce746b"
+        }
+      },
+      "also_stated_by": [
+        "P3",
+        "N3"
+      ],
+      "rule": {
+        "kind": "forbid_dependency",
+        "params": {
+          "deny_list": [
+            {
+              "crate": "async-openai",
+              "basis": "literal",
+              "quote": "No LLM calls live inside these crates. (P3, SPEC.md L63)"
+            },
+            {
+              "crate": "anthropic-sdk",
+              "basis": "literal",
+              "quote": "No LLM calls live inside these crates. (P3, SPEC.md L63)"
+            },
+            {
+              "crate": "openai",
+              "basis": "literal",
+              "quote": "No LLM calls live inside these crates. (P3, SPEC.md L63)"
+            },
+            {
+              "crate": "reqwest",
+              "basis": "inferred",
+              "quote": "'100% deterministic' (P3/D11) -- network I/O has unbounded latency and availability failure and is a canonical non-determinism source; one inferential step from the verbatim quote, not itself stated"
+            },
+            {
+              "crate": "hyper",
+              "basis": "inferred",
+              "quote": "same inference as reqwest"
+            },
+            {
+              "crate": "ureq",
+              "basis": "inferred",
+              "quote": "same inference as reqwest"
+            },
+            {
+              "crate": "isahc",
+              "basis": "inferred",
+              "quote": "same inference as reqwest"
+            },
+            {
+              "crate": "curl",
+              "basis": "inferred",
+              "quote": "same inference as reqwest"
+            },
+            {
+              "crate": "fastrand",
+              "basis": "inferred",
+              "quote": "same inference as rand"
+            },
+            {
+              "crate": "getrandom",
+              "basis": "inferred",
+              "quote": "same inference as rand"
+            }
+          ],
+          "excluded_by_design": [
+            {
+              "crate": "uuid",
+              "reason": "the crate offers deterministic UUID variants (v3/v5) alongside random v4; banning the whole crate is not cleanly grounded in the verbatim text. See OBL-D11-03 for the narrower call-site rule this compiles to instead."
+            },
+            {
+              "crate": "rand",
+              "reason": "Fixed per review DEF-10 (uuid/rand treated inconsistently in the draft -- same structural shape, different treatment). rand offers a clean deterministic API (StdRng::seed_from_u64, SmallRng::seed_from_u64) alongside non-deterministic default entry points (rand::random(), rand::thread_rng()), structurally identical to uuid's v3/v5-vs-v4 split. Banning the whole crate is no better grounded in D11's verbatim text than banning all of uuid would have been. Narrowed to a call-site rule instead -- OBL-D11-03 already listed rand::random and rand::thread_rng as forbidden patterns even in the original draft, so this fix removes the redundant/inconsistent blanket ban rather than adding new enforcement."
+            }
+          ],
+          "denied_scope": [
+            "g8-core",
+            "g8-extractor",
+            "g8-store",
+            "g8-planner",
+            "g8-conflict",
+            "g8"
+          ],
+          "surrealdb_note": "surrealdb is intentionally NOT in this list -- it is compiled once under OBL-P9-01 (grounded in P9/N1's own verbatim text) per contract rule 1 (restatements compile once under the most operative, textually-grounded parent).",
+          "fastrand_getrandom_note": "fastrand and getrandom remain on the flat deny_list (NOT given the same carve-out as rand/uuid) because they are not equally analogous: fastrand's entire public API is built around an implicit thread-local global RNG with no ergonomic seeded/deterministic entry point to allow-list, and getrandom is a raw OS-entropy binding with no deterministic mode at all by design. A blanket crate-level ban is the only available deterministic check for these two.",
+          "known_limitation": "Per review DEF-15: this check (cargo metadata dependency-graph inspection) can only prove absence of a DECLARED dependency; it cannot detect non-deterministic code vendored directly into a crate's source tree (e.g. a hand-copied HTTP client with no Cargo.toml entry). OBL-D11-01's complementary grep is also blind to this if the vendored code uses blocking I/O with no matching literal import string. No fully deterministic, complete check for 'no non-deterministic behavior anywhere' is achievable from the current evidence -- 'no declared usage of named libraries' is the closest provable approximation. See OQ-08."
+        }
+      },
+      "scope": {
+        "crates": [
+          "g8-core",
+          "g8-extractor",
+          "g8-store",
+          "g8-planner",
+          "g8-conflict",
+          "g8"
+        ],
+        "paths": [
+          "Cargo.toml",
+          "crates/*/Cargo.toml"
+        ]
+      },
+      "convergence_test": {
+        "id": "conv-d11-02",
+        "check": "cargo metadata --format-version1 | jq '.packages[].dependencies[].name' restricted to the six workspace crates' dependency trees; diff against deny_list",
+        "fails_when": "any denied crate name appears in the resolved dependency tree of any of the six crates"
+      },
+      "checker": {
+        "mode": "typed",
+        "checks": [
+          {
+            "backend": "cargo_metadata_no_dep",
+            "args": {
+              "denied": [
+                {
+                  "kind": "exact",
+                  "value": "async-openai"
+                },
+                {
+                  "kind": "exact",
+                  "value": "anthropic-sdk"
+                },
+                {
+                  "kind": "exact",
+                  "value": "openai"
+                },
+                {
+                  "kind": "exact",
+                  "value": "reqwest"
+                },
+                {
+                  "kind": "exact",
+                  "value": "hyper"
+                },
+                {
+                  "kind": "exact",
+                  "value": "ureq"
+                },
+                {
+                  "kind": "exact",
+                  "value": "isahc"
+                },
+                {
+                  "kind": "exact",
+                  "value": "curl"
+                },
+                {
+                  "kind": "exact",
+                  "value": "fastrand"
+                },
+                {
+                  "kind": "exact",
+                  "value": "getrandom"
+                }
+              ],
+              "scope_crates": [],
+              "build_config": "default"
+            }
+          }
+        ]
+      },
+      "signal": {
+        "gate": "g8-conflict",
+        "conflict_kind": "GovernanceViolation",
+        "wiring": "compiled_intent_extension",
+        "advisory": false
+      }
+    },
+    {
+      "id": "OBL-D11-03",
+      "descends_from": {
+        "decision": "D11",
+        "title": "Deterministic vs non-deterministic zones (the M1 principle).",
+        "why": "The value of the protocol is in the deterministic gate, not the drafting layer. Mixing zones inside one crate is the failure mode to avoid.",
+        "why_kind": "explicit_rationale",
+        "source": {
+          "file": "SPEC.md",
+          "lines": "L330-345",
+          "sha256": "49e825a4d1a47f076d948033105d693b0f5d3097a2fa5f13134ffb2fb5ce746b"
+        }
+      },
+      "also_stated_by": [],
+      "rule": {
+        "kind": "forbid_pattern",
+        "params": {
+          "pattern_kind": "ast_grep",
+          "patterns": [
+            "Uuid::new_v4()",
+            "rand::random",
+            "rand::thread_rng()"
+          ],
+          "description": "Call-site-level ban narrower than OBL-D11-02's crate deny-list: forbids invoking non-deterministic random-generation functions (e.g. UUID v4) anywhere in the six deterministic crates, without banning the uuid crate itself (which also offers deterministic v3/v5 generation)."
+        }
+      },
+      "scope": {
+        "crates": [
+          "g8-core",
+          "g8-extractor",
+          "g8-store",
+          "g8-planner",
+          "g8-conflict",
+          "g8"
+        ],
+        "paths": [
+          "crates/*/src/**"
+        ]
+      },
+      "convergence_test": {
+        "id": "conv-d11-03",
+        "check": "ast-grep --lang rust --pattern 'Uuid::new_v4()' crates/*/src/**/*.rs (repeat for rand::random, rand::thread_rng)",
+        "fails_when": "any match found"
+      },
+      "checker": {
+        "mode": "typed",
+        "checks": [
+          {
+            "backend": "ast_grep_no_match",
+            "args": {
+              "patterns": [
+                "Uuid::new_v4()",
+                "rand::random",
+                "rand::thread_rng()"
+              ],
+              "lang": "rust",
+              "glob": [
+                "crates/*/src/**"
+              ],
+              "exclude_glob": [],
+              "capture_predicate": null
+            }
+          }
+        ]
+      },
+      "signal": {
+        "gate": "g8-conflict",
+        "conflict_kind": "GovernanceViolation",
+        "wiring": "compiled_intent_extension",
+        "advisory": false
+      }
+    },
+    {
+      "id": "OBL-D11-04",
+      "descends_from": {
+        "decision": "D11",
+        "title": "Deterministic vs non-deterministic zones (the M1 principle).",
+        "why": "The value of the protocol is in the deterministic gate, not the drafting layer. Mixing zones inside one crate is the failure mode to avoid.",
+        "why_kind": "explicit_rationale",
+        "source": {
+          "file": "SPEC.md",
+          "lines": "L330-345",
+          "sha256": "49e825a4d1a47f076d948033105d693b0f5d3097a2fa5f13134ffb2fb5ce746b"
+        }
+      },
+      "also_stated_by": [
+        "P3",
+        "N3"
+      ],
+      "rule": {
+        "kind": "forbid_pattern",
+        "params": {
+          "pattern_kind": "ast_grep",
+          "patterns": [
+            "HashMap<$K, $V>",
+            "HashSet<$T>"
+          ],
+          "description": "Added per review DEF-11: std::collections::HashMap/HashSet use a per-process-random SipHash seed by default, so iteration order is not stable across runs even for byte-identical input -- a language-runtime non-determinism hazard distinct from any importable-library hazard, and undetectable by OBL-D11-01/02's dependency- and grep-based checks. Forbidden as a field type or intermediate collection on any path feeding --output json/--output pretty (D10) or a composite-query return column (D6), unless immediately converted to a sorted Vec, BTreeMap, or IndexMap before being serialized/rendered.",
+          "exempt_if": "followed by an explicit .sort()/sorted conversion, or replaced with BTreeMap/IndexMap"
+        }
+      },
+      "scope": {
+        "crates": [
+          "g8-store",
+          "g8"
+        ],
+        "paths": [
+          "crates/g8-store/src/queries.rs",
+          "crates/g8-store/src/store_impl.rs",
+          "crates/g8/src/render/**"
+        ]
+      },
+      "convergence_test": {
+        "id": "conv-d11-04",
+        "check": "run the same `g8 check --json` (or `g8 query`) command twice against an identical, >=2-element fixture store; byte-diff the two stdout captures",
+        "fails_when": "the two byte-diffed outputs differ in ordering for any array with >=2 elements"
+      },
+      "checker": {
+        "mode": "typed",
+        "checks": [
+          {
+            "backend": "byte_diff_twice",
+            "args": {
+              "seed_files": [
+                {
+                  "path": "src/lib.rs",
+                  "content": "// @g8.capability(name = \"alpha-cap\", status = \"in_flight\", substrate = \"test\")\npub fn alpha() {}\n\n// @g8.capability(name = \"beta-cap\", status = \"in_flight\", substrate = \"test\")\npub fn beta() {}\n"
+                }
+              ],
+              "setup": [
+                {
+                  "args": [
+                    "init"
+                  ],
+                  "env": {}
+                },
+                {
+                  "args": [
+                    "scan"
+                  ],
+                  "env": {}
+                }
+              ],
+              "compare": {
+                "args": [
+                  "query",
+                  "capabilities",
+                  "--output",
+                  "json"
+                ],
+                "env": {}
+              },
+              "normalize_paths": []
+            }
+          }
+        ]
+      },
+      "signal": {
+        "gate": "g8-conflict",
+        "conflict_kind": "GovernanceViolation",
+        "wiring": "compiled_intent_extension",
+        "advisory": false
+      }
+    },
+    {
+      "id": "OBL-N4-01",
+      "descends_from": {
+        "decision": "N4",
+        "title": "No MCP server.",
+        "why": "- **No MCP server.** CLI-first. Subagent definitions (Markdown files) are the agent-integration surface.",
+        "why_kind": "statement_only",
+        "source": {
+          "file": "SPEC.md",
+          "lines": "L86",
+          "sha256": "49e825a4d1a47f076d948033105d693b0f5d3097a2fa5f13134ffb2fb5ce746b"
+        }
+      },
+      "also_stated_by": [
+        "P4"
+      ],
+      "rule": {
+        "kind": "forbid_pattern",
+        "params": {
+          "checks": [
+            {
+              "kind": "dependency_name_regex",
+              "regex": "(?i)mcp",
+              "description": "no Cargo dependency in any of the six crates whose package name matches /mcp/i (case-insensitive); heuristic for MCP SDK crates, deliberately not naming a specific crate since none is evidenced"
+            },
+            {
+              "kind": "ast_grep",
+              "pattern": "Command::Serve",
+              "description": "g8's clap Commands enum must not gain a serve/mcp/mcp-server subcommand or a stdio JSON-RPC transport wired to g8-planner"
+            },
+            {
+              "kind": "ast_grep",
+              "pattern": "$SOCKET.incoming()",
+              "description": "Fixed per review DEF-14 (the two literal-token checks are under-inclusive -- a dependency named e.g. 'agent-rpc-server' paired with a subcommand named e.g. Command::Bridge would pass both unchanged). Behavior-level check independent of naming: any stdin/stdio or socket-accept transport loop within g8's command-dispatch module that calls into g8_planner:: is forbidden, regardless of what the dependency or subcommand is named."
+            }
+          ],
+          "description": "g8-planner is a callable Rust library and clap subcommand only (P4); there is no MCP server, CLI-first, subagent Markdown definitions are the integration surface (N4)."
+        }
+      },
+      "scope": {
+        "crates": [
+          "g8",
+          "g8-planner"
+        ],
+        "paths": [
+          "crates/g8/src/**",
+          "crates/g8-planner/src/**",
+          "Cargo.toml",
+          "crates/*/Cargo.toml"
+        ]
+      },
+      "convergence_test": {
+        "id": "conv-n4-01",
+        "check": "cargo metadata dependency-name grep for /mcp/i across the workspace; ast-grep over g8's Commands enum for a serve/mcp-shaped variant",
+        "fails_when": "either check finds a match"
+      },
+      "checker": {
+        "mode": "typed",
+        "checks": [
+          {
+            "backend": "cargo_metadata_no_dep",
+            "args": {
+              "denied": [
+                {
+                  "kind": "regex",
+                  "value": "(?i)mcp"
+                }
+              ],
+              "scope_crates": [],
+              "build_config": "default"
+            }
+          },
+          {
+            "backend": "ast_grep_no_match",
+            "args": {
+              "patterns": [
+                "$SOCKET.incoming()"
+              ],
+              "lang": "rust",
+              "glob": [
+                "crates/g8/src/**"
+              ],
+              "exclude_glob": [],
+              "capture_predicate": null
+            }
+          }
+        ]
+      },
+      "signal": {
+        "gate": "g8-conflict",
+        "conflict_kind": "GovernanceViolation",
+        "wiring": "compiled_intent_extension",
+        "advisory": false
+      }
+    },
+    {
+      "id": "OBL-N5-01",
+      "descends_from": {
+        "decision": "N5",
+        "title": "No web UI.",
+        "why": "- **No web UI.** `g8 status` writes Markdown to stdout and to `.g8/INTENT_SUMMARY.md`. A dashboard is roadmap material.",
+        "why_kind": "statement_only",
+        "source": {
+          "file": "SPEC.md",
+          "lines": "L87",
+          "sha256": "49e825a4d1a47f076d948033105d693b0f5d3097a2fa5f13134ffb2fb5ce746b"
+        }
+      },
+      "also_stated_by": [],
+      "rule": {
+        "kind": "forbid_dependency",
+        "params": {
+          "deny_list": [
+            {
+              "crate": "axum",
+              "basis": "inferred",
+              "quote": "'No web UI.' (N5) -- a web-application-framework dependency is the canonical building block of a web UI; denying it operationalizes the non-goal"
+            },
+            {
+              "crate": "actix-web",
+              "basis": "inferred",
+              "quote": "same inference"
+            },
+            {
+              "crate": "warp",
+              "basis": "inferred",
+              "quote": "same inference"
+            },
+            {
+              "crate": "rocket",
+              "basis": "inferred",
+              "quote": "same inference"
+            },
+            {
+              "crate": "tower-http",
+              "basis": "inferred",
+              "quote": "same inference (HTTP-serving middleware)"
+            },
+            {
+              "crate": "tiny_http",
+              "basis": "literal + live-code finding",
+              "quote": "'No web UI... A dashboard is roadmap material.' (N5, SPEC.md L87); ARCHITECTURE.md L1564 explicitly states 'serve is a post-v0.1 addition.' tiny_http is ALREADY a real, declared dependency in the current repo (root Cargo.toml:50, crates/g8/Cargo.toml:39), tied to a fully-wired `g8 serve` subcommand (see OQ-08). Not a hypothetical: this specific check, run against the real repo today, currently FAILS."
+            }
+          ],
+          "required_instead": "`g8 status` writes Markdown to stdout and to .g8/INTENT_SUMMARY.md (N5 verbatim).",
+          "checks": [
+            {
+              "kind": "dependency_name",
+              "description": "see deny_list above"
+            },
+            {
+              "kind": "ast_grep",
+              "pattern": "tiny_http::Server::$METHOD($$$ARGS)",
+              "description": "Fixed per review DEF-18: the prior pattern (\"Command::Serve\") was a literal subcommand-name match while its own description claimed name-agnostic behavior detection -- a direct contradiction. Replaced with a genuine behavior/API-surface check, parallel in kind to OBL-N4-01's DEF-14 fix (which matches the .incoming() socket-accept call, not a dependency or subcommand name): this pattern matches any construction of a tiny_http::Server (the confirmed real HTTP-serving API in this repo), regardless of what subcommand, module, or variable name wraps it. Genuinely independent of naming now, not just claimed to be."
+            }
+          ]
+        }
+      },
+      "scope": {
+        "crates": [
+          "g8-core",
+          "g8-extractor",
+          "g8-store",
+          "g8-planner",
+          "g8-conflict",
+          "g8"
+        ],
+        "paths": [
+          "Cargo.toml",
+          "crates/*/Cargo.toml"
+        ]
+      },
+      "convergence_test": {
+        "id": "conv-n5-01",
+        "check": "cargo metadata dependency-name check for the deny_list crates across the workspace",
+        "fails_when": "any denied crate appears as a dependency"
+      },
+      "checker": {
+        "mode": "typed",
+        "checks": [
+          {
+            "backend": "cargo_metadata_no_dep",
+            "args": {
+              "denied": [
+                {
+                  "kind": "exact",
+                  "value": "axum"
+                },
+                {
+                  "kind": "exact",
+                  "value": "actix-web"
+                },
+                {
+                  "kind": "exact",
+                  "value": "warp"
+                },
+                {
+                  "kind": "exact",
+                  "value": "rocket"
+                },
+                {
+                  "kind": "exact",
+                  "value": "tower-http"
+                },
+                {
+                  "kind": "exact",
+                  "value": "tiny_http"
+                }
+              ],
+              "scope_crates": [],
+              "build_config": "default"
+            }
+          }
+        ]
+      },
+      "signal": {
+        "gate": "g8-conflict",
+        "conflict_kind": "GovernanceViolation",
+        "wiring": "compiled_intent_extension",
+        "advisory": false
+      },
+      "known_live_violation": "As of this compile, this obligation's convergence_test FAILS against the real repo: crates/g8/src/cli.rs:81 (Serve(ServeArgs)), main.rs:96 (Command::Serve => serve::run(...)), and ARCHITECTURE.md 9.2 (L1571-1591) fully specify an already-implemented `g8 serve` web dashboard (routes table, SSE, tiny_http), despite ARCHITECTURE.md L1564 itself calling it 'a post-v0.1 addition' and SPEC.md's D7 locked subcommand list (L255-258) and N5 non-goal (L87) both omitting/forbidding it. This is a real, live SPEC/ARCHITECTURE-vs-code drift, found independently this session (not by V1 or V2, though V2's T1 aside on tiny_http pointed at it) -- see OQ-08. Only Mike can decide whether to update the binding docs to formally admit `serve` into v0.1 scope, or gate/revert the code."
+    },
+    {
+      "id": "OBL-N6-01",
+      "descends_from": {
+        "decision": "N6",
+        "title": "No automatic stale-promotion of plans.",
+        "why": "- **No automatic stale-promotion of plans.** The scanner *proposes* promotions; humans approve.",
+        "why_kind": "statement_only",
+        "source": {
+          "file": "SPEC.md",
+          "lines": "L88",
+          "sha256": "49e825a4d1a47f076d948033105d693b0f5d3097a2fa5f13134ffb2fb5ce746b"
+        }
+      },
+      "also_stated_by": [],
+      "rule": {
+        "kind": "forbid_pattern",
+        "params": {
+          "pattern_kind": "ast_grep",
+          "pattern": "$STORE.update_plan_status($ID, PlanStatus::$ANY)",
+          "description": "The `g8 scan` code path must never itself write a Plan status transition (e.g. Parked -> Scoped/Dispatched); status-mutating writes may occur only inside the dedicated `g8 plan promote` command handler, which is human-invoked.",
+          "forbidden_glob": "crates/g8/src/cmd/scan.rs",
+          "allowed_glob": "crates/g8/src/cmd/plan.rs",
+          "forbidden_fn": "run (crates/g8/src/cmd/scan.rs:13, the scan command's entry point)",
+          "allowed_fn": "plan_promote (crates/g8/src/cmd/plan.rs:237, the only fn allowed to write a Parked -> non-Parked transition)",
+          "glob_fix_note": "Fixed per review checklist-row-5 finding (not a numbered DEF- entry, found in the per-checklist-verdicts table): forbidden_glob/allowed_glob held prose descriptions ('g8 scan command handler / scanner module'), not real globs or function references. Replaced with the real file:line/fn names, confirmed by direct read this session."
+        }
+      },
+      "scope": {
+        "crates": [
+          "g8",
+          "g8-store"
+        ],
+        "paths": [
+          "crates/g8/src/**",
+          "crates/g8-store/src/**"
+        ]
+      },
+      "convergence_test": {
+        "id": "conv-n6-01",
+        "check": "ast-grep search for plan-status-mutating calls reachable from the scan command's call graph, as opposed to the plan promote command's",
+        "fails_when": "a status-mutating write is reachable from `scan` outside the `plan promote` handler"
+      },
+      "checker": {
+        "mode": "typed",
+        "checks": [
+          {
+            "backend": "ast_grep_no_match",
+            "args": {
+              "patterns": [
+                "$STORE.update_plan_status($ID, PlanStatus::$ANY)"
+              ],
+              "lang": "rust",
+              "glob": [
+                "crates/g8/src/cmd/scan.rs"
+              ],
+              "exclude_glob": [],
+              "capture_predicate": null
+            }
+          }
+        ]
+      },
+      "signal": {
+        "gate": "g8-conflict",
+        "conflict_kind": "GovernanceViolation",
+        "wiring": "compiled_intent_extension",
+        "advisory": false
+      }
+    },
+    {
+      "id": "OBL-N7-01",
+      "descends_from": {
+        "decision": "N7",
+        "title": "No modification of target codebases during `scan`.",
+        "why": "- **No modification of target codebases during `scan`.** `g8 scan` is read-only; only `g8 plan new` and `g8 init` write to `.g8/`.",
+        "why_kind": "statement_only",
+        "source": {
+          "file": "SPEC.md",
+          "lines": "L89",
+          "sha256": "49e825a4d1a47f076d948033105d693b0f5d3097a2fa5f13134ffb2fb5ce746b"
+        }
+      },
+      "also_stated_by": [],
+      "rule": {
+        "kind": "forbid_write",
+        "params": {
+          "command": "g8 scan",
+          "forbidden_target": ".g8/store.db",
+          "allowed_writers": [
+            "g8 plan new",
+            "g8 init"
+          ],
+          "scope_fix_note": "Fixed per review checklist-row-5 finding: the draft's rule text claimed a broader forbidden_target ('any file under .g8/, except read access') than convergence_test conv-n7-01 actually verifies (store.db hash only). Narrowed the rule's claim to match what is actually tested, rather than expanding the test to hash-check the whole .g8/ directory (which could false-positive on legitimate scan-time artifacts this compile has no evidence about, e.g. logs or caches). Other .g8/ files have their own dedicated checks elsewhere: .g8/INTENT_SUMMARY.md is covered by OBL-D4-02, .g8/config.toml's enforcement flag by OBL-D9-01."
+        }
+      },
+      "scope": {
+        "crates": [
+          "g8",
+          "g8-store"
+        ],
+        "paths": [
+          "crates/g8/src/**",
+          "crates/g8-store/src/**"
+        ]
+      },
+      "convergence_test": {
+        "id": "conv-n7-01",
+        "check": "sha256sum .g8/store.db before running `g8 scan`; run `g8 scan`; sha256sum again",
+        "fails_when": "the two hashes differ"
+      },
+      "checker": {
+        "mode": "typed",
+        "checks": [
+          {
+            "backend": "fixture_integration_test",
+            "args": {
+              "setup": [
+                {
+                  "args": [
+                    "init"
+                  ],
+                  "env": {}
+                },
+                {
+                  "args": [
+                    "scan"
+                  ],
+                  "env": {}
+                }
+              ],
+              "assertions": [
+                {
+                  "kind": "file_hash_unchanged",
+                  "path": ".g8/store.db",
+                  "before_step": 0,
+                  "after_step": 1
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "signal": {
+        "gate": "g8-conflict",
+        "conflict_kind": "GovernanceViolation",
+        "wiring": "compiled_intent_extension",
+        "advisory": false
+      }
+    },
+    {
+      "id": "OBL-N8-01",
+      "descends_from": {
+        "decision": "N8",
+        "title": "No cross-process write coordination beyond SQLite's WAL.",
+        "why": "- **No cross-process write coordination beyond SQLite's WAL.** Two concurrent `g8` invocations on the same store are safe up to SQLite's `busy_timeout`; beyond that, we error loudly rather than corrupt. (per R4 §6 Risk 2)",
+        "why_kind": "statement_only",
+        "source": {
+          "file": "SPEC.md",
+          "lines": "L90",
+          "sha256": "49e825a4d1a47f076d948033105d693b0f5d3097a2fa5f13134ffb2fb5ce746b"
+        }
+      },
+      "also_stated_by": [],
+      "rule": {
+        "kind": "require_pattern",
+        "params": {
+          "requirements": [
+            "rusqlite connection sets journal_mode = WAL.",
+            "rusqlite connection sets a busy_timeout pragma.",
+            "On SQLITE_BUSY persisting beyond busy_timeout, the error must propagate to the caller (loud failure), never be swallowed or silently retried forever."
+          ]
+        }
+      },
+      "scope": {
+        "crates": [
+          "g8-store"
+        ],
+        "paths": [
+          "crates/g8-store/src/**"
+        ]
+      },
+      "convergence_test": {
+        "id": "conv-n8-01",
+        "check": "grep g8-store's connection-setup code for journal_mode and busy_timeout pragma calls; integration test: open two connections to the same store.db, hold a write lock past busy_timeout on one, assert the second returns an Err",
+        "fails_when": "either pragma is absent, or the contended second connection does not return a propagated error"
+      },
+      "checker": {
+        "mode": "typed",
+        "checks": [
+          {
+            "backend": "rg_match_count",
+            "args": {
+              "pattern": "journal_mode\\s*=\\s*WAL",
+              "glob": [
+                "crates/g8-store/src/**"
+              ],
+              "expected": {
+                "kind": "at_least",
+                "value": 1
+              }
+            }
+          },
+          {
+            "backend": "rg_match_count",
+            "args": {
+              "pattern": "busy_timeout",
+              "glob": [
+                "crates/g8-store/src/**"
+              ],
+              "expected": {
+                "kind": "at_least",
+                "value": 1
+              }
+            }
+          },
+          {
+            "backend": "fixture_integration_test",
+            "args": {
+              "setup": [
+                {
+                  "args": [
+                    "init"
+                  ],
+                  "env": {}
+                }
+              ],
+              "assertions": [
+                {
+                  "kind": "second_connection_errs_after_timeout"
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "signal": {
+        "gate": "g8-conflict",
+        "conflict_kind": "GovernanceViolation",
+        "wiring": "compiled_intent_extension",
+        "advisory": false
+      }
+    },
+    {
+      "id": "OBL-G1-01",
+      "descends_from": {
+        "decision": "G1",
+        "title": "Glossary.",
+        "why": "## 5. Glossary — bolded terms defined verbatim: **Annotation**, **Capability**, **Intent**, **Plan**, **ConvergenceSpace**, **Project**, **Substrate**, **Owner**, **FitReport**, **Conflict**, **Annotation grammar**. Plan lifecycle enumeration (embedded in Plan entry): `Idea → Scoped → Dispatched → Blocked → Done | Parked`.",
+        "why_kind": "statement_only",
+        "source": {
+          "file": "SPEC.md",
+          "lines": "L94-116",
+          "sha256": "49e825a4d1a47f076d948033105d693b0f5d3097a2fa5f13134ffb2fb5ce746b"
+        }
+      },
+      "also_stated_by": [],
+      "rule": {
+        "kind": "vocabulary_lock",
+        "params": {
+          "canonical_terms": [
+            "Annotation",
+            "Capability",
+            "Intent",
+            "Plan",
+            "ConvergenceSpace",
+            "Project",
+            "Substrate",
+            "Owner",
+            "FitReport",
+            "Conflict"
+          ],
+          "similarity_predicate": "levenshtein(candidate, canonical) <= 2 OR starts_with(candidate, canonical) OR starts_with(canonical, candidate)",
+          "predicate_source": "graph-tool vocabulary_drift.surql:46-50, reproduced deterministically (not via a live SurrealDB instance, per P9 no-SurrealDB / no-Codegraph-hard-dep)",
+          "scope_of_candidates": "any new struct/enum/type name introduced in g8-core, and this obligation set's own load-bearing vocabulary (title/rule.kind/signal.gate/glossary-adjacent identifiers) Existing-type citations inside another obligation's rule.params (e.g. a real function signature quoted for provenance, such as OBL-D6-01's 'PlanDraft') are citations, not newly-introduced identifiers, and are out of scope by definition, in addition to the explicit allowlist above.",
+          "allowlist": [
+            "PlanStatus",
+            "CapabilityStatus",
+            "AnnotationKind",
+            "IntentKind",
+            "DecisionStatus",
+            "PlanDraft"
+          ],
+          "allowlist_reason": "Real, SPEC-mandated or evidence-confirmed derived types (Canonical+Suffix pattern: <Term>Status/<Term>Kind/<Term>Draft) that legitimately prefix-collide with a canonical term under the raw predicate. Fixed per review DEF-01 (PlanStatus/CapabilityStatus/AnnotationKind/IntentKind collide with Plan/Capability/Annotation/Intent -- confirmed by direct read of g8-core/src/{plan,model,annotation}.rs) and DEF-12 (this obligation set's OWN OBL-D6-01.rule.params.function field cites 'PlanDraft', which would otherwise self-flag under the artifact's own vocabulary_lock scope). DecisionStatus (model.rs:264-270) added proactively for consistency -- same derived-suffix shape, not yet cited elsewhere in this artifact but would collide identically if it were.",
+          "excluded_glossary_term": {
+            "term": "Annotation grammar",
+            "reason": "SPEC Section 5's 11th glossary entry is a two-word process-noun (the magic-comment syntax itself), not a candidate Rust type/struct/enum identifier, so it cannot be sensibly Levenshtein/prefix-compared against code symbol names the way the other 10 terms are. Disclosed per review DEF-13; not silently dropped."
+          },
+          "known_accepted_gap": "The predicate (Levenshtein<=2 OR starts_with either direction) is reused VERBATIM from graph-tool's real vocabulary_drift.surql:46-50 (contract rule 5: real predicates only, not an improved reinvention). It catches suffix-append drift (ClaimDraft, CapabilityDraft) but NOT prefix-qualifier drift (RawCapability, SubPlan, MetaIntent -- Levenshtein distance 3, over threshold, and starts_with fails both directions since the strings diverge at character 0). Accepted as a known gap per review DEF-16, consistent with a periodic manual-triage backstop for exactly this class of miss -- a false negative here is lower-stakes than diverging from the real, evidenced algorithm."
+        }
+      },
+      "scope": {
+        "crates": [
+          "g8-core"
+        ],
+        "paths": [
+          "crates/g8-core/src/**",
+          "specs/obligations-v0.1.json"
+        ]
+      },
+      "convergence_test": {
+        "id": "conv-g1-01",
+        "check": "run a small deterministic script implementing levenshtein<=2 OR prefix-match against every new type/struct/enum name added to g8-core (and against this obligation set's own vocabulary) vs. the 10 canonical terms",
+        "fails_when": "any candidate name NOT in rule.params.allowlist satisfies the similarity predicate against a canonical term without being an exact match to it (e.g. Capabilty levenshtein=1; CapabilityDraft prefix-match). A baseline-vs-new-commit diff mechanism for what counts as 'new' remains undefined -- see OQ-10."
+      },
+      "checker": {
+        "mode": "typed",
+        "checks": [
+          {
+            "backend": "builtin_algorithm",
+            "args": {
+              "name": "vocabulary_drift",
+              "params": {
+                "canonical_terms": [
+                  "Annotation",
+                  "Capability",
+                  "Intent",
+                  "Plan",
+                  "ConvergenceSpace",
+                  "Project",
+                  "Substrate",
+                  "Owner",
+                  "FitReport",
+                  "Conflict"
+                ],
+                "allowlist": [
+                  "PlanStatus",
+                  "CapabilityStatus",
+                  "AnnotationKind",
+                  "IntentKind",
+                  "DecisionStatus",
+                  "PlanDraft",
+                  "AnnotationValue",
+                  "ConflictKind",
+                  "IntentOverlap",
+                  "IntentSourceKind",
+                  "PlanIntentRelation",
+                  "SubstrateBudget"
+                ],
+                "scope_glob": [
+                  "crates/g8-core/src/**"
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "signal": {
+        "gate": "codegraph_vocabulary_drift",
+        "conflict_kind": null,
+        "wiring": "compiled_intent_extension",
+        "advisory": true
+      }
+    }
+  ],
+  "conflicts": [
+    {
+      "id": "CONF-DX-01",
+      "kind": "ContradictoryDecisions",
+      "severity": "Error",
+      "contradicts": [
+        "P4",
+        "N4"
+      ],
+      "evidence": [
+        {
+          "type": "note",
+          "text": "Add an MCP server exposing g8-planner's intent-check as an MCP verb. (planted input DX, decisions-input.json)"
+        },
+        {
+          "type": "decision_ref",
+          "decision_id": "P4",
+          "title": "Skills not MCP tools."
+        },
+        {
+          "type": "note",
+          "text": "P4 verbatim (SPEC.md L65): 'It is *not* an MCP verb.'"
+        },
+        {
+          "type": "decision_ref",
+          "decision_id": "N4",
+          "title": "No MCP server."
+        },
+        {
+          "type": "note",
+          "text": "N4 verbatim (SPEC.md L86): 'No MCP server. CLI-first.'"
+        }
+      ],
+      "detected_by": "Detected by manual/LLM semantic comparison of DX's text against P4/N4's verbatim clauses during compile; no automated predicate evaluates decision-level (as opposed to code-level) contradictions in v0.1. Independently re-validated by V2/T5's three deterministic checks (an /mcp/i regex match against DX's text as a textual analog of OBL-N4-01's dependency-name predicate, plus two direct lexical-negation checks against N4's and P4's verbatim clauses) -- but the ORIGINAL detection, at compile time, was the semantic reading, not a pattern match. Reworded per review DEF-03, which found the original phrasing borrowed the vocabulary of the deterministic-code-checking domain for what was actually a judgment call.",
+      "resolution": "open_question",
+      "wiring": "compiled_intent_extension",
+      "obligations_emitted": 0,
+      "evidence_shape_note": "Course-corrected per reviewer direction (2nd F1 pass): the 1st pass used Note-only, reasoning P4/N4 lack a 'real' stored DecisionId. The reviewer instructed mirroring the real Evidence::DecisionRef{decision_id,title} struct exactly (conflict.rs:100-103) instead -- decision_id holds the same 'P4'/'N4' string identifier used as descends_from.decision throughout this whole artifact, which is not an invented value, just the existing canonical reference. Verbatim quote context (which does not fit DecisionRef's 2-field shape) is preserved via sibling Evidence::Note entries rather than dropped -- this half of DEF-02's original fix (quotes belong in Note) is retained."
+    }
+  ],
+  "open_questions": [
+    {
+      "id": "OQ-01",
+      "see": "open-questions-final.md"
+    },
+    {
+      "id": "OQ-02",
+      "see": "open-questions-final.md",
+      "status": "DISSOLVED (pass 2) -- fully compiled as OBL-P6-01, see open-questions-final.md"
+    },
+    {
+      "id": "OQ-03",
+      "see": "open-questions-final.md"
+    },
+    {
+      "id": "OQ-04",
+      "see": "open-questions-final.md"
+    },
+    {
+      "id": "OQ-05",
+      "see": "open-questions-final.md"
+    },
+    {
+      "id": "OQ-06",
+      "see": "open-questions-final.md"
+    },
+    {
+      "id": "OQ-07",
+      "see": "open-questions-final.md"
+    },
+    {
+      "id": "OQ-08",
+      "see": "open-questions-final.md"
+    },
+    {
+      "id": "OQ-09",
+      "see": "open-questions-final.md"
+    },
+    {
+      "id": "OQ-10",
+      "see": "open-questions-final.md"
+    }
+  ]
+}

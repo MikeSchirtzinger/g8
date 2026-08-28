@@ -1,0 +1,62 @@
+[package]
+name = "g8"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+documentation = "https://docs.rs/g8"
+readme = "README.md"
+description = "G8 (pronounced gate): machine-checked obligations for agentic software development. A structural gate over the compiler, run in pre-commit or CI."
+keywords = ["obligations", "governance", "invariants", "agents", "ci"]
+categories = ["development-tools", "command-line-utilities"]
+
+[[bin]]
+name = "g8"
+path = "src/main.rs"
+
+[dependencies]
+g8-core.workspace    = true
+g8-extractor.workspace = true
+g8-store.workspace   = true
+g8-planner.workspace = true
+g8-conflict.workspace = true
+# Obligations self-audit is core audit surface, not an optional add-on — see
+# specs/obligation-checker-contract.md §5 ("audit checks run even when
+# enforcement is off"). Deliberately NOT feature-gated.
+g8-obligations.workspace = true
+
+clap.workspace        = true
+anyhow.workspace      = true
+serde.workspace       = true
+serde_json.workspace  = true
+tracing.workspace     = true
+tracing-subscriber.workspace = true
+toml.workspace        = true
+notify.workspace      = true
+chrono.workspace      = true
+rusqlite.workspace    = true
+
+# `g8 serve` dashboard: HTTP server + an ephemeral auth token. Both optional,
+# gated behind the `serve` feature (default OFF — see [features] below), so a
+# default build pulls in neither tiny_http nor a direct nanoid dependency.
+# nanoid is already resolved transitively via g8-core's ID generation, so
+# enabling `serve` adds zero new crates to the dependency tree.
+tiny_http = { workspace = true, optional = true }
+nanoid    = { workspace = true, optional = true }
+
+[features]
+default = []
+# HTTP dashboard (`g8 serve`). Off by default: it binds a local port and,
+# even hardened (loopback-only unless --allow-external-unsafe, token-gated
+# POST routes, no wildcard CORS — see crates/g8/src/serve/mod.rs), that's
+# attack surface most `g8` users never need. Build with
+# `--features serve` to get the subcommand.
+serve = ["dep:tiny_http", "dep:nanoid"]
+
+[dev-dependencies]
+tempfile.workspace    = true
+assert_cmd            = "2"
+predicates            = "3"

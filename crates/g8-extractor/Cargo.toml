@@ -1,0 +1,27 @@
+[package]
+name = "g8-extractor"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+documentation = "https://docs.rs/g8-extractor"
+readme = "README.md"
+description = "G8 annotation extractor: ast-grep shell-out + Markdown sidecar parser for Rust, TS, Python, Go"
+keywords = ["ast-grep", "annotation", "extractor", "parser", "developer-tools"]
+categories = ["development-tools", "parser-implementations"]
+
+[dependencies]
+g8-core    = { workspace = true }
+serde       = { workspace = true }
+serde_json  = { workspace = true }
+thiserror   = { workspace = true }
+tracing     = { workspace = true }
+regex       = { workspace = true }
+ignore      = { workspace = true }
+sha2        = { workspace = true }
+
+[dev-dependencies]
+tempfile    = { workspace = true }

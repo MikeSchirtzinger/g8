@@ -1,0 +1,43 @@
+# cargo-deny configuration for the G8 workspace
+# https://embarkstudios.github.io/cargo-deny/
+#
+# Uses advisories config version = 2 (cargo-deny >= 0.14).
+# In v2, "vulnerability" is always denied implicitly; "unmaintained" takes a
+# Scope value ("all" | "workspace" | "transitive" | "none") not a lint level.
+
+[advisories]
+version = 2
+# Report unmaintained crates for the full dep tree (produces warnings, not errors).
+# Set to "none" to silence, "workspace" to limit to direct workspace deps.
+unmaintained = "all"
+# Yanked crate versions are a hard failure.
+yanked = "deny"
+
+[licenses]
+# Crates must be under at least one of these SPDX identifiers.
+# Dual-licensed "MIT OR Apache-2.0" crates are allowed because both sides
+# are listed here. Do NOT write "MIT OR Apache-2.0" as a single entry —
+# cargo-deny expects individual SPDX short identifiers.
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Unicode-DFS-2016",
+    "Unicode-3.0",
+    "BSD-3-Clause",
+    "BSD-2-Clause",
+    "ISC",
+    "Zlib",
+    "CC0-1.0",
+]
+
+[bans]
+# Warn on multiple versions of the same crate; not a hard failure since some
+# transitive dup versions are unavoidable until the ecosystem converges.
+multiple-versions = "warn"
+wildcards = "allow"
+
+[sources]
+# Only crates.io is an allowed registry; reject git-sourced or unknown deps.
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]

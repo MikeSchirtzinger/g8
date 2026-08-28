@@ -1,0 +1,97 @@
+name: Publish Dry Run
+
+# Validates that each crate can be packaged and (for g8-core) fully published.
+#
+# APPROACH: Two-tier validation chosen after local testing (2026-05-28):
+#
+#   Tier 1 — `cargo package --list -p <crate>` (all 6 crates)
+#     Validates manifest completeness and file selection without resolving
+#     sibling crates from crates.io. Works for all workspace members even
+#     when they depend on each other via path deps.
+#
+#   Tier 2 — `cargo publish --dry-run --allow-dirty -p g8-core` (g8-core only)
+#     Full publish simulation including compilation. Only works for g8-core
+#     because it has no internal workspace path deps. For g8-extractor through
+#     g8, `cargo publish --dry-run` fails with "no matching package named
+#     g8-core found in registry" because sibling path deps are not yet on
+#     crates.io. This is expected — crates must be published in dependency order
+#     on first release.
+#
+# On first publish: release g8-core → wait for index propagation (~30s) → then
+# release g8-extractor, g8-store, g8-conflict (no inter-dependency) →
+# then g8-planner → then g8.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  package-list:
+    name: cargo package --list (${{ matrix.crate }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        crate:
+          - g8-core
+          - g8-extractor
+          - g8-store
+          - g8-planner
+          - g8-conflict
+          - g8-obligations
+          - g8
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install stable Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-pkg-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-pkg-
+
+      - name: Validate package manifest + file list
+        # cargo package --list validates: manifest parse, required fields,
+        # file inclusion, and that the .crate archive can be assembled.
+        run: cargo package --list -p ${{ matrix.crate }}
+
+  publish-dryrun-core:
+    name: cargo publish --dry-run (g8-core)
+    runs-on: ubuntu-latest
+    # g8-core has no internal workspace path deps — full dry-run works.
+    # For all other crates, the matrix job above covers manifest validation.
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install stable Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-dryrun-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-dryrun-
+
+      - name: Full publish dry-run (g8-core)
+        run: cargo publish --dry-run --allow-dirty -p g8-core
