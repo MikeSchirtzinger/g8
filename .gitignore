@@ -25,3 +25,36 @@ Cargo.lock.bak
 
 # Pre-git tarball snapshots (superseded by git history itself)
 /.backup-*/
+
+# Machine-local inventory + agent-harness state. These describe THIS checkout
+# on THIS machine (adoption status, pane sessions, scratch transcripts) and
+# say nothing about the code, so they never belong in a public history.
+.ada/
+.pane-*
+.herdr/
+.aider*
+.codex/
+.cursor/
+.gemini/
+.claude/settings.local.json
+.claude/history/
+.claude/projects/
+
+# Local environment + secrets
+.env
+.env.*
+!.env.example
+.envrc
+.direnv/
+*.local.toml
+*.local.json
+*.local.yaml
+*.pem
+*.key
+secrets/
+
+# Local logs, profiles, and captures
+*.log
+*.profraw
+/screenshots/
+/captures/
