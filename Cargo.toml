@@ -69,7 +69,7 @@ chrono = { version = "0.4", default-features = false, features = ["std", "serde"
 # nanoid: retained ONLY for g8's feature-gated `serve` token minting
 # (legitimate, opt-in randomness outside the deterministic zone).
 sha2   = "0.10"
-nanoid = "0.4"
+nanoid = "0.5"
 
 # ── Internal workspace crates (used by other workspace crates) ─────────────
 g8-core       = { version = "0.1.2", path = "crates/g8-core" }
