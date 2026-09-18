@@ -84,14 +84,14 @@ pub fn run(ctx: &Ctx, args: &InitArgs) -> Result<i32> {
     // 6. Append `@.g8/INTENT_SUMMARY.md` to `CLAUDE.md`.
     if !args.no_claude_import {
         append_claude_md_import(&root).unwrap_or_else(|e| {
-            eprintln!("warn: could not update CLAUDE.md: {e}");
+            eprintln!("warn: could not update CLAUDE.md: {e:#}");
         });
     }
 
     // 7. Drop `.claude/agents/g8-planner.md`.
     if !args.no_subagents {
         drop_subagent_definition(&root).unwrap_or_else(|e| {
-            eprintln!("warn: could not write subagent definition: {e}");
+            eprintln!("warn: could not write subagent definition: {e:#}");
         });
     }
 
@@ -231,9 +231,9 @@ fn run_audit_scan(root: &std::path::Path) -> AuditOutcome {
                     decisions,
                 })
             }
-            Err(e) => AuditOutcome::Skipped(format!("scan failed: {e}")),
+            Err(e) => AuditOutcome::Skipped(format!("scan failed: {e:#}")),
         },
-        Err(e) => AuditOutcome::Skipped(format!("extractor unavailable: {e}")),
+        Err(e) => AuditOutcome::Skipped(format!("extractor unavailable: {e:#}")),
     }
 }
 

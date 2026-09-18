@@ -12,7 +12,7 @@ use std::time::Instant;
 
 use serde::{Deserialize, Serialize};
 
-use crate::hashing::sha256_repo_files;
+use crate::hashing::{sha256_repo_files, sha256_repo_files_legacy};
 use crate::result::{aggregate, Evidence, ObligationResult, ObligationStatus, SubCheckResult};
 
 pub const ATTESTATIONS_RELATIVE_PATH: &str = "specs/attestations-v0.1.json";
@@ -213,14 +213,25 @@ pub(crate) fn evaluate(
         }
     };
 
-    if current_pin != record.pinned_content_hash {
+    // Pins written by `govern attest` (0.1.0) used a different domain
+    // separator for multi-file sets. They verify the same content, so a
+    // match under the old separator is a fresh pin, not a stale one.
+    let pin_scheme = if current_pin == record.pinned_content_hash {
+        "g8-v1"
+    } else if sha256_repo_files_legacy(workspace_root, &record.files)
+        .ok()
+        .as_deref()
+        == Some(record.pinned_content_hash.as_str())
+    {
+        "govern-v1"
+    } else {
         return stale_result(
             record,
             "attested file content changed after the evidence was recorded".to_string(),
             Some(current_pin),
             start,
         );
-    }
+    };
 
     let status = match record.claim {
         AttestationClaim::Passed => ObligationStatus::Passed,
@@ -231,6 +242,7 @@ pub(crate) fn evaluate(
         status,
         detail: serde_json::json!({
             "attestation_state": "fresh",
+            "pin_scheme": pin_scheme,
             "summary": format!("fresh attestation {}: {}", record.id, record.evidence()),
             "attestation_id": record.id,
             "evidence_pointer": record.evidence(),
@@ -372,6 +384,36 @@ mod tests {
             result.evidence.detail["classification"],
             STALE_ATTESTATION_CLASSIFICATION
         );
+    }
+
+    /// A multi-file pin recorded by govern 0.1.0 (old domain separator) over
+    /// unchanged files is fresh, and the scheme is named in the detail.
+    #[test]
+    fn multi_file_pin_from_govern_0_1_0_is_fresh() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        std::fs::write(dir.path().join("evidence.txt"), b"stable").expect("write evidence");
+        std::fs::write(dir.path().join("second.txt"), b"also stable").expect("write second");
+        let files = vec!["evidence.txt".to_string(), "second.txt".to_string()];
+        let legacy_pin =
+            crate::hashing::sha256_repo_files_legacy(dir.path(), &files).expect("legacy pin");
+        assert_ne!(legacy_pin, sha256_repo_files(dir.path(), &files).unwrap());
+        let mut legacy = record(dir.path(), AttestationClaim::Passed);
+        legacy.files = files;
+        legacy.pinned_content_hash = legacy_pin;
+        let loaded = Ok(Some(AttestationSidecar {
+            attestations: vec![legacy],
+            ..AttestationSidecar::default()
+        }));
+
+        let result = run("OBL-X-01", "ATT-1", &loaded, dir.path());
+        assert_eq!(result.status, ObligationStatus::Passed);
+        assert_eq!(result.trust, Some(TrustLevel::Asserted));
+        assert_eq!(result.evidence.detail["pin_scheme"], "govern-v1");
+
+        // The same record with a changed file is still stale under both schemes.
+        std::fs::write(dir.path().join("second.txt"), b"changed").expect("rewrite second");
+        let result = run("OBL-X-01", "ATT-1", &loaded, dir.path());
+        assert_eq!(result.status, ObligationStatus::Unknown);
     }
 
     #[test]

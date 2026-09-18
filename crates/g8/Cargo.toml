@@ -39,6 +39,10 @@ notify.workspace      = true
 chrono.workspace      = true
 rusqlite.workspace    = true
 
+[target.'cfg(unix)'.dependencies]
+# SIGPIPE reset in main.rs; already in the tree via rusqlite.
+libc = "0.2"
+
 # `g8 serve` dashboard: HTTP server + an ephemeral auth token. Both optional,
 # gated behind the `serve` feature (default OFF — see [features] below), so a
 # default build pulls in neither tiny_http nor a direct nanoid dependency.

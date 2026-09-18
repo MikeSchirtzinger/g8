@@ -25,7 +25,7 @@ pub fn run(ctx: &Ctx, args: &StatusArgs) -> Result<i32> {
 
     if !args.no_regen {
         regenerate_intent_summary(ctx, &store, root)
-            .unwrap_or_else(|e| eprintln!("warn: could not regenerate INTENT_SUMMARY.md: {e}"));
+            .unwrap_or_else(|e| eprintln!("warn: could not regenerate INTENT_SUMMARY.md: {e:#}"));
     }
 
     // Read and print the summary.
@@ -56,7 +56,7 @@ pub fn run(ctx: &Ctx, args: &StatusArgs) -> Result<i32> {
                     crate::render::pretty::render_conflicts(&conflicts, ctx.color)
                 }
             },
-            Err(e) => eprintln!("warn: intra-conflict detection failed: {e}"),
+            Err(e) => eprintln!("warn: intra-conflict detection failed: {e:#}"),
         }
     }
 

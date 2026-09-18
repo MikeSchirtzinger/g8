@@ -27,6 +27,21 @@ use ctx::Ctx;
 fn main() {
     let cli = Cli::parse();
 
+    // ── SIGPIPE ──────────────────────────────────────────────────────────────
+    // Rust's runtime ignores SIGPIPE at startup, so `g8 check | head` used to
+    // die with "failed printing to stdout: Broken pipe" (a panic in
+    // `println!`, exit 101). Restoring the default disposition lets a closed
+    // pipe end the process quietly, as every other CLI does. `serve` keeps
+    // the ignore: a dashboard client closing its socket must not take the
+    // server down.
+    #[cfg(feature = "serve")]
+    let is_serve = matches!(cli.command, Command::Serve(_));
+    #[cfg(not(feature = "serve"))]
+    let is_serve = false;
+    if !is_serve {
+        restore_default_sigpipe();
+    }
+
     // ── Tracing init (per ARCH §12) ──────────────────────────────────────────
     init_tracing(cli.verbose);
 
@@ -47,7 +62,7 @@ fn main() {
         ) {
             Ok(c) => c,
             Err(e) => {
-                eprintln!("g8: error building context: {e}");
+                eprintln!("g8: error building context: {e:#}");
                 process::exit(2);
             }
         },
@@ -130,3 +145,15 @@ fn init_tracing(verbose: u8) {
             .init();
     }
 }
+
+#[cfg(unix)]
+fn restore_default_sigpipe() {
+    // SAFETY: signal(2) with SIG_DFL only resets the disposition of SIGPIPE
+    // for this process. No handler is installed and no memory is shared.
+    unsafe {
+        libc::signal(libc::SIGPIPE, libc::SIG_DFL);
+    }
+}
+
+#[cfg(not(unix))]
+fn restore_default_sigpipe() {}

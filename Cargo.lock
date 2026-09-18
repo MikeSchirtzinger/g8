@@ -452,6 +452,7 @@ dependencies = [
  "g8-obligations",
  "g8-planner",
  "g8-store",
+ "libc",
  "nanoid",
  "notify",
  "predicates",

@@ -59,8 +59,12 @@ pub fn run(ctx: &Ctx, args: &CheckArgs) -> Result<i32> {
             // Exit code 2: internal failure — "unrelated to any one
             // obligation" per contract §5.1's own parenthetical, so the
             // obligations self-audit is deliberately skipped here.
-            eprintln!("g8 check: internal error: {e}");
-            json_render::render_check(&[], 2, false, &[], None, &[], None);
+            // `{e:#}` prints the whole context chain. The bare `{e}` this
+            // used to print showed only the outermost label ("running store
+            // migrations") and hid the cause a user needs to act on.
+            let detail = format!("internal error: {e:#}");
+            eprintln!("g8 check: {detail}");
+            json_render::render_check(&[], 2, false, &[], Some(&detail), &[], None);
             return Ok(2);
         }
     };

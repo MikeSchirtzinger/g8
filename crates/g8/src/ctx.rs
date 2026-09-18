@@ -126,7 +126,8 @@ pub fn resolve_g8_dir(start: &Path) -> Result<PathBuf> {
 /// Parsed `.g8/config.toml`.
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize, Default)]
 pub struct G8Config {
-    #[serde(default)]
+    /// `[g8]` today; `[govern]` is what `govern init` wrote and is still read.
+    #[serde(default, alias = "govern")]
     pub g8: G8Section,
     #[serde(default)]
     pub extractor: ExtractorSection,
@@ -273,4 +274,31 @@ pub fn require_init(ctx: &Ctx) -> Result<()> {
         );
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn load_config_reads_legacy_govern_table() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        std::fs::write(
+            dir.path().join("config.toml"),
+            "[govern]\nversion = \"0.1.0\"\nproject_name = \"steward\"\nspace_id = \"abc\"\n\n[extractor]\n\n[ui]\n",
+        )
+        .expect("write");
+        let config = load_config(dir.path()).expect("legacy config parses");
+        assert_eq!(config.g8.space_id.as_deref(), Some("abc"));
+        assert_eq!(config.g8.project_name.as_deref(), Some("steward"));
+    }
+
+    #[test]
+    fn load_config_reads_current_g8_table() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        std::fs::write(dir.path().join("config.toml"), "[g8]\nspace_id = \"xyz\"\n")
+            .expect("write");
+        let config = load_config(dir.path()).expect("config parses");
+        assert_eq!(config.g8.space_id.as_deref(), Some("xyz"));
+    }
 }

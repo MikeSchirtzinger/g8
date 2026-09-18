@@ -854,3 +854,110 @@ fn test_watch_returns_handle() {
     let _handle = store.watch(|| {}).expect("watch");
     // Dropping the handle stops the watcher (no assertion needed)
 }
+
+// ── stores written by govern 0.1.0 ───────────────────────────────────────────
+
+/// Checksum refinery recorded for V1 in a store initialised by govern 0.1.0
+/// (`refinery_schema_history` of steward's `.govern/store.db`, 2026-08-21).
+/// V1__init.sql must stay byte-identical to keep this value. Any schema change
+/// goes in a new migration; editing V1 locks every store from that era out.
+const GOVERN_0_1_0_V1_CHECKSUM: u64 = 8761469828895239941;
+
+#[test]
+fn v1_checksum_matches_stores_written_by_govern_0_1_0() {
+    let runner = g8_store::migrations::migrations::runner();
+    let v1 = runner
+        .get_migrations()
+        .iter()
+        .find(|m| m.version() == 1)
+        .expect("V1 is embedded");
+    assert_eq!(
+        v1.checksum(),
+        GOVERN_0_1_0_V1_CHECKSUM,
+        "V1__init.sql was edited; refinery will refuse every store created by govern 0.1.0. Add a new migration instead."
+    );
+}
+
+/// A store left at V1 with a `govern_sidecar` intent and a plan that references
+/// it: opening it with the current binary must apply V2, rewrite the row, keep
+/// the plan link, and enforce the new CHECK.
+#[test]
+fn legacy_v1_store_with_govern_sidecar_rows_migrates() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let path = dir.path().join("store.db");
+    {
+        let mut conn = rusqlite::Connection::open(&path).expect("open raw");
+        conn.execute_batch("PRAGMA foreign_keys=ON;")
+            .expect("pragma");
+        g8_store::migrations::migrations::runner()
+            .set_target(refinery::Target::Version(1))
+            .run(&mut conn)
+            .expect("apply V1 only");
+        conn.execute_batch(
+            "INSERT INTO convergence_space (id, name, root_path, created_at, updated_at)
+               VALUES ('sp', 'space', '/tmp/sp', 1, 1);
+             INSERT INTO intent (id, space_id, kind, heading, scope_path, scope_depth,
+                                 source_file, source_kind, created_at, updated_at)
+               VALUES ('in1', 'sp', 'boundary', 'legacy', '/tmp/sp', 0,
+                       '.govern/intent.toml', 'govern_sidecar', 1, 1);
+             INSERT INTO intent (id, space_id, kind, heading, scope_path, scope_depth,
+                                 source_file, source_kind, created_at, updated_at)
+               VALUES ('in2', 'sp', 'boundary', 'manual', '/tmp/sp', 0,
+                       'AGENTS.md', 'agents_md', 1, 1);
+             INSERT INTO plan (id, space_id, title, created_at, updated_at)
+               VALUES ('pl', 'sp', 'plan', 1, 1);
+             INSERT INTO plan_intent (plan_id, intent_id) VALUES ('pl', 'in1');",
+        )
+        .expect("seed legacy rows");
+    }
+
+    {
+        let mut store = RusqliteStore::open(&path).expect("open");
+        store
+            .migrate()
+            .expect("V2 applies to a store created by govern 0.1.0");
+    }
+
+    // Inspect through a fresh connection: the store type keeps its handle
+    // private, and a new connection also proves the changes were committed.
+    let conn = rusqlite::Connection::open(&path).expect("reopen raw");
+    conn.execute_batch("PRAGMA foreign_keys=ON;")
+        .expect("pragma");
+    let kinds: Vec<String> = conn
+        .prepare("SELECT source_kind FROM intent ORDER BY id")
+        .unwrap()
+        .query_map([], |r| r.get(0))
+        .unwrap()
+        .collect::<Result<_, _>>()
+        .unwrap();
+    assert_eq!(
+        kinds,
+        vec!["g8_sidecar".to_string(), "agents_md".to_string()]
+    );
+
+    let linked: i64 = conn
+        .query_row(
+            "SELECT count(*) FROM plan_intent WHERE plan_id='pl' AND intent_id='in1'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(linked, 1, "plan link survives the table rebuild");
+
+    let rejected = conn.execute(
+        "INSERT INTO intent (id, space_id, kind, heading, scope_path, scope_depth,
+                             source_file, source_kind, created_at, updated_at)
+           VALUES ('in3', 'sp', 'boundary', 'old', '/tmp/sp', 0, 'x', 'govern_sidecar', 1, 1)",
+        [],
+    );
+    assert!(rejected.is_err(), "the old value is no longer accepted");
+
+    let applied: Vec<i64> = conn
+        .prepare("SELECT version FROM refinery_schema_history ORDER BY version")
+        .unwrap()
+        .query_map([], |r| r.get(0))
+        .unwrap()
+        .collect::<Result<_, _>>()
+        .unwrap();
+    assert_eq!(applied, vec![1, 2]);
+}

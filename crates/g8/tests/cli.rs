@@ -588,5 +588,5 @@ fn test_full_round_trip_empty_dir() {
     let stdout = String::from_utf8_lossy(&output.stdout);
     let json: serde_json::Value =
         serde_json::from_str(&stdout).expect("check --json must be valid JSON");
-    assert_eq!(json["g8_version"], "0.1.0");
+    assert_eq!(json["g8_version"], env!("CARGO_PKG_VERSION"));
 }

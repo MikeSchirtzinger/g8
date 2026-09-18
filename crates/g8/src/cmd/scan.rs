@@ -83,7 +83,7 @@ pub fn run(ctx: &Ctx, args: &ScanArgs) -> Result<i32> {
     // Regenerate INTENT_SUMMARY.md
     let root_path = ctx.g8_dir.parent().unwrap_or(&ctx.g8_dir);
     crate::cmd::status::regenerate_intent_summary(ctx, &store, root_path)
-        .unwrap_or_else(|e| eprintln!("warn: could not regenerate INTENT_SUMMARY.md: {e}"));
+        .unwrap_or_else(|e| eprintln!("warn: could not regenerate INTENT_SUMMARY.md: {e:#}"));
 
     match ctx.output {
         OutputMode::Json => json::render_scan_result(

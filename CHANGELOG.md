@@ -21,6 +21,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Stores created by govern 0.1.0 could not be opened: the rename edited
+  `V1__init.sql` in place, so refinery saw a different checksum for an
+  already-applied migration and refused every such store ("running store
+  migrations"). V1 is restored byte-for-byte and pinned by a test against
+  the checksum govern 0.1.0 recorded; the `govern_sidecar` to `g8_sidecar`
+  rename now lives in `V2__g8_sidecar.sql`, which rebuilds `intent` and
+  rewrites existing rows. `migrate()` switches foreign keys off around the
+  run and runs `PRAGMA foreign_key_check` afterwards. A store that has taken
+  V2 is no longer readable by govern 0.1.0.
+- Multi-file attestation pins recorded by `govern attest` read as stale under
+  g8: the rename changed the hash domain separator. Verification accepts the
+  govern separator as well and reports `pin_scheme` (`g8-v1` or `govern-v1`)
+  in the attestation detail. New pins are written with the g8 separator only.
+- `govern.lock` is read where `g8.lock` is absent, so a project ratified
+  before the rename is still ratified. `g8.lock` wins when both exist.
+- `.govern/config.toml` written by `govern init` uses a `[govern]` table;
+  it is now read as `[g8]`.
+- `g8 check` printed only the outermost error label on an internal failure
+  (for example "running store migrations" without the refinery cause). The
+  full error chain is printed and carried in the JSON `obligations_note`.
+  The same truncation is fixed in the context, status, scan, and init
+  warnings.
+- `g8 ... | head` panicked with "failed printing to stdout: Broken pipe"
+  (exit 101). SIGPIPE is restored to its default disposition for every
+  command except `serve`, so a closed pipe ends the process quietly.
+- The CLI round-trip test pinned `g8_version` to `0.1.0` and failed since
+  the 0.1.1 bump; it now compares against the crate version.
 - Plan ids that begin with `-` (the id alphabet includes it) were rejected
   by the `plan` subcommands as unknown flags. Positional ids now accept
   hyphen-leading values.

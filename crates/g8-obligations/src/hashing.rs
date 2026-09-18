@@ -113,6 +113,32 @@ pub fn sha256_repo_files(
     workspace_root: &Path,
     relative_paths: &[String],
 ) -> Result<String, HashingError> {
+    sha256_repo_files_with_domain(workspace_root, relative_paths, FILES_DOMAIN)
+}
+
+/// Domain separator for multi-file pins written by `g8 attest`.
+const FILES_DOMAIN: &[u8] = b"g8-attestation-files-v1\0";
+
+/// Domain separator `govern attest` (0.1.0) used for the same construction.
+/// The rename changed only this string, so every multi-file pin recorded by
+/// govern stopped matching under g8. Verification accepts both.
+const LEGACY_FILES_DOMAIN: &[u8] = b"govern-attestation-files-v1\0";
+
+/// [`sha256_repo_files`] under the govern 0.1.0 domain separator. Used only
+/// to verify pins recorded before the rename; new pins are never written
+/// with it.
+pub fn sha256_repo_files_legacy(
+    workspace_root: &Path,
+    relative_paths: &[String],
+) -> Result<String, HashingError> {
+    sha256_repo_files_with_domain(workspace_root, relative_paths, LEGACY_FILES_DOMAIN)
+}
+
+fn sha256_repo_files_with_domain(
+    workspace_root: &Path,
+    relative_paths: &[String],
+    domain: &[u8],
+) -> Result<String, HashingError> {
     let inputs: Vec<PathBuf> = relative_paths.iter().map(PathBuf::from).collect();
     let normalized = normalize_repo_paths(workspace_root, &inputs)?;
 
@@ -121,7 +147,7 @@ pub fn sha256_repo_files(
     }
 
     let mut hasher = Sha256::new();
-    hasher.update(b"g8-attestation-files-v1\0");
+    hasher.update(domain);
     for relative in normalized {
         let path_bytes = relative.as_bytes();
         hasher.update((path_bytes.len() as u64).to_be_bytes());
@@ -139,6 +165,27 @@ pub fn sha256_repo_files(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn legacy_domain_differs_only_for_multi_file_sets() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        std::fs::write(dir.path().join("a.txt"), b"a").expect("write a");
+        std::fs::write(dir.path().join("b.txt"), b"b").expect("write b");
+
+        let one = vec!["a.txt".to_string()];
+        assert_eq!(
+            sha256_repo_files(dir.path(), &one).unwrap(),
+            sha256_repo_files_legacy(dir.path(), &one).unwrap(),
+            "a single file is its plain SHA-256 under both schemes"
+        );
+
+        let two = vec!["a.txt".to_string(), "b.txt".to_string()];
+        assert_ne!(
+            sha256_repo_files(dir.path(), &two).unwrap(),
+            sha256_repo_files_legacy(dir.path(), &two).unwrap(),
+            "the domain separator is the only difference, and it must show"
+        );
+    }
 
     #[test]
     fn hashes_exact_file_bytes_with_standard_sha256() {

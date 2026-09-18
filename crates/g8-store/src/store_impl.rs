@@ -319,11 +319,37 @@ impl RusqliteStore {
     /// Apply all pending refinery migrations.
     ///
     /// Safe to call multiple times — refinery is idempotent.
+    ///
+    /// Foreign-key enforcement is switched off for the duration of the run
+    /// and restored afterwards. Migrations that rebuild a table (V2 rebuilds
+    /// `intent` to change a CHECK constraint) need this: `PRAGMA foreign_keys`
+    /// is a no-op inside the transaction refinery opens per migration, and
+    /// dropping a referenced table with enforcement on fails. A
+    /// `PRAGMA foreign_key_check` after the run turns any dangling reference
+    /// into an error instead of a silently inconsistent store.
     pub fn migrate(&mut self) -> Result<(), StoreError> {
         let mut conn = self.conn.lock().unwrap();
+        conn.execute_batch("PRAGMA foreign_keys=OFF;")?;
+        let outcome = Self::run_migrations(&mut conn);
+        let restored = conn.execute_batch("PRAGMA foreign_keys=ON;");
+        outcome?;
+        restored?;
+        Ok(())
+    }
+
+    fn run_migrations(conn: &mut Connection) -> Result<(), StoreError> {
         migrations::migrations::runner()
-            .run(&mut *conn)
+            .run(conn)
             .map_err(|e| StoreError::Migration(e.to_string()))?;
+        let violations: i64 =
+            conn.query_row("SELECT count(*) FROM pragma_foreign_key_check", [], |r| {
+                r.get(0)
+            })?;
+        if violations > 0 {
+            return Err(StoreError::Migration(format!(
+                "{violations} foreign key violation(s) after migrations (PRAGMA foreign_key_check)"
+            )));
+        }
         Ok(())
     }
 

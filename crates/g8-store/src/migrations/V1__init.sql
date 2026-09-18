@@ -1,6 +1,6 @@
 -- ============================================================
--- g8-store schema v1
--- Applied via refinery on `g8 init` / first store open.
+-- govern-store schema v1
+-- Applied via refinery on `govern init` / first store open.
 -- ARCHITECTURE.md §8 is the canonical DDL source.
 -- ============================================================
 
@@ -67,7 +67,7 @@ CREATE TABLE IF NOT EXISTS intent (
     source_file   TEXT NOT NULL,
     source_line   INTEGER,
     source_kind   TEXT NOT NULL
-        CHECK (source_kind IN ('agents_md','claude_md','g8_sidecar','inline_comment','manual')),
+        CHECK (source_kind IN ('agents_md','claude_md','govern_sidecar','inline_comment','manual')),
     created_at    INTEGER NOT NULL,
     updated_at    INTEGER NOT NULL,
     meta          TEXT
