@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-09-18
+
+All seven crates move to one workspace version from this release on.
+0.1.1 was a CLI-only republish that dropped hardcoded smoke-test paths from
+the published `g8` crate; the library crates stayed at 0.1.0.
+
 ### Changed
 
 - **Renamed to G8** (pronounced "gate"). Crates `govern-*` are now `g8-*` and

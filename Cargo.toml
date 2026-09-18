@@ -11,7 +11,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.1.0"
+version = "0.1.2"
 edition = "2021"
 rust-version = "1.78"
 license = "MIT OR Apache-2.0"
@@ -72,12 +72,12 @@ sha2   = "0.10"
 nanoid = "0.4"
 
 # ── Internal workspace crates (used by other workspace crates) ─────────────
-g8-core       = { version = "0.1.0", path = "crates/g8-core" }
-g8-extractor  = { version = "0.1.0", path = "crates/g8-extractor" }
-g8-store      = { version = "0.1.0", path = "crates/g8-store" }
-g8-planner    = { version = "0.1.0", path = "crates/g8-planner" }
-g8-conflict   = { version = "0.1.0", path = "crates/g8-conflict" }
-g8-obligations = { version = "0.1.0", path = "crates/g8-obligations" }
+g8-core       = { version = "0.1.2", path = "crates/g8-core" }
+g8-extractor  = { version = "0.1.2", path = "crates/g8-extractor" }
+g8-store      = { version = "0.1.2", path = "crates/g8-store" }
+g8-planner    = { version = "0.1.2", path = "crates/g8-planner" }
+g8-conflict   = { version = "0.1.2", path = "crates/g8-conflict" }
+g8-obligations = { version = "0.1.2", path = "crates/g8-obligations" }
 
 # ── Test-time only ──────────────────────────────────────────────────────────
 tempfile     = "3"

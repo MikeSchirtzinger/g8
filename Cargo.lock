@@ -440,7 +440,7 @@ dependencies = [
 
 [[package]]
 name = "g8"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "anyhow",
  "assert_cmd",
@@ -468,7 +468,7 @@ dependencies = [
 
 [[package]]
 name = "g8-conflict"
-version = "0.1.0"
+version = "0.1.2"
 dependencies = [
  "g8-core",
  "g8-store",
@@ -480,7 +480,7 @@ dependencies = [
 
 [[package]]
 name = "g8-core"
-version = "0.1.0"
+version = "0.1.2"
 dependencies = [
  "chrono",
  "serde",
@@ -492,7 +492,7 @@ dependencies = [
 
 [[package]]
 name = "g8-extractor"
-version = "0.1.0"
+version = "0.1.2"
 dependencies = [
  "g8-core",
  "ignore",
@@ -507,7 +507,7 @@ dependencies = [
 
 [[package]]
 name = "g8-obligations"
-version = "0.1.0"
+version = "0.1.2"
 dependencies = [
  "g8-core",
  "g8-store",
@@ -525,7 +525,7 @@ dependencies = [
 
 [[package]]
 name = "g8-planner"
-version = "0.1.0"
+version = "0.1.2"
 dependencies = [
  "g8-core",
  "g8-store",
@@ -537,7 +537,7 @@ dependencies = [
 
 [[package]]
 name = "g8-store"
-version = "0.1.0"
+version = "0.1.2"
 dependencies = [
  "chrono",
  "g8-core",
