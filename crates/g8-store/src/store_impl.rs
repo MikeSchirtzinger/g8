@@ -338,6 +338,7 @@ impl RusqliteStore {
     }
 
     fn run_migrations(conn: &mut Connection) -> Result<(), StoreError> {
+        Self::adopt_g8_0_1_0_v1(conn)?;
         migrations::migrations::runner()
             .run(conn)
             .map_err(|e| StoreError::Migration(e.to_string()))?;
@@ -350,6 +351,37 @@ impl RusqliteStore {
                 "{violations} foreign key violation(s) after migrations (PRAGMA foreign_key_check)"
             )));
         }
+        Ok(())
+    }
+
+    /// Re-record V1 for stores initialised by g8 0.1.0.
+    ///
+    /// g8 0.1.0 shipped a V1__init.sql edited in place by the rename (header
+    /// comments, and `g8_sidecar` in the `intent.source_kind` CHECK). The
+    /// fix restored govern's V1 byte-for-byte, which reopened govern-era
+    /// stores but locked out every store g8 0.1.0 created, with "applied
+    /// migration V1__init is different than filesystem one". The two V1
+    /// files produce the same tables apart from that CHECK, and V2 rebuilds
+    /// `intent` with the `g8_sidecar` CHECK either way, so such a store is
+    /// adopted by recording the govern V1 checksum and letting V2 run.
+    fn adopt_g8_0_1_0_v1(conn: &Connection) -> Result<(), StoreError> {
+        let has_history: bool = conn.query_row(
+            "SELECT EXISTS (SELECT 1 FROM sqlite_master \
+             WHERE type='table' AND name='refinery_schema_history')",
+            [],
+            |r| r.get(0),
+        )?;
+        if !has_history {
+            return Ok(());
+        }
+        conn.execute(
+            "UPDATE refinery_schema_history SET checksum = ?1 \
+             WHERE version = 1 AND checksum = ?2",
+            params![
+                migrations::GOVERN_0_1_0_V1_CHECKSUM.to_string(),
+                migrations::G8_0_1_0_V1_CHECKSUM.to_string()
+            ],
+        )?;
         Ok(())
     }
 

@@ -961,3 +961,72 @@ fn legacy_v1_store_with_govern_sidecar_rows_migrates() {
         .unwrap();
     assert_eq!(applied, vec![1, 2]);
 }
+
+/// A store initialised by g8 0.1.0, which shipped an in-place-edited V1: it
+/// must open under the current binary, have its V1 re-recorded under the
+/// govern checksum, apply V2, and keep its `g8_sidecar` rows.
+#[test]
+fn store_written_by_g8_0_1_0_opens_and_migrates() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let path = dir.path().join("store.db");
+    {
+        let mut conn = rusqlite::Connection::open(&path).expect("open raw");
+        let v1 = refinery::Migration::unapplied(
+            "V1__init",
+            include_str!("fixtures/g8_0_1_0_V1__init.sql"),
+        )
+        .expect("g8 0.1.0 V1 parses");
+        refinery::Runner::new(&[v1])
+            .run(&mut conn)
+            .expect("apply g8 0.1.0 V1");
+        let recorded: String = conn
+            .query_row(
+                "SELECT checksum FROM refinery_schema_history WHERE version = 1",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            recorded,
+            g8_store::migrations::G8_0_1_0_V1_CHECKSUM.to_string(),
+            "fixture reproduces the checksum found in real g8 0.1.0 stores"
+        );
+        conn.execute_batch(
+            "INSERT INTO convergence_space (id, name, root_path, created_at, updated_at)
+               VALUES ('sp', 'space', '/tmp/sp', 1, 1);
+             INSERT INTO intent (id, space_id, kind, heading, scope_path, scope_depth,
+                                 source_file, source_kind, created_at, updated_at)
+               VALUES ('in1', 'sp', 'boundary', 'sidecar', '/tmp/sp', 0,
+                       '.g8/intent.toml', 'g8_sidecar', 1, 1);",
+        )
+        .expect("seed g8 0.1.0 rows");
+    }
+
+    {
+        let mut store = RusqliteStore::open(&path).expect("open");
+        store
+            .migrate()
+            .expect("a store created by g8 0.1.0 opens");
+        store.migrate().expect("second open is a no-op");
+    }
+
+    let conn = rusqlite::Connection::open(&path).expect("reopen raw");
+    let history: Vec<(i64, String)> = conn
+        .prepare("SELECT version, checksum FROM refinery_schema_history ORDER BY version")
+        .unwrap()
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
+        .unwrap()
+        .collect::<Result<_, _>>()
+        .unwrap();
+    assert_eq!(history.len(), 2, "V2 applied");
+    assert_eq!(
+        history[0],
+        (1, g8_store::migrations::GOVERN_0_1_0_V1_CHECKSUM.to_string())
+    );
+    let kind: String = conn
+        .query_row("SELECT source_kind FROM intent WHERE id='in1'", [], |r| {
+            r.get(0)
+        })
+        .unwrap();
+    assert_eq!(kind, "g8_sidecar");
+}
