@@ -25,6 +25,10 @@ pub struct Ctx {
     pub g8_dir: PathBuf,
     /// Absolute path to the store file.
     pub store_path: PathBuf,
+    /// Directory whose files checks run against. The parent of `g8_dir`,
+    /// except in a linked git worktree that borrows the main checkout's
+    /// `.g8/`, where it is the worktree's own top level.
+    pub project_root: PathBuf,
     /// Parsed `.g8/config.toml` (if present).
     pub config: Option<G8Config>,
 }
@@ -40,7 +44,10 @@ impl Ctx {
         store_override: Option<&Path>,
         cwd: &Path,
     ) -> Result<Self> {
-        let g8_dir = resolve_g8_dir(cwd)?;
+        let G8Layout {
+            g8_dir,
+            project_root,
+        } = resolve_g8_layout(cwd)?;
         let store_path = store_override
             .map(|p| p.to_path_buf())
             .unwrap_or_else(|| g8_dir.join("store.db"));
@@ -53,6 +60,7 @@ impl Ctx {
             quiet,
             g8_dir,
             store_path,
+            project_root,
             config,
         })
     }
@@ -67,6 +75,7 @@ impl Ctx {
             quiet,
             g8_dir,
             store_path,
+            project_root: cwd.to_path_buf(),
             config: None,
         }
     }
@@ -98,27 +107,86 @@ impl Ctx {
 
 // ── G8 dir resolution ────────────────────────────────────────────────────────
 
+/// Where the `.g8/` directory is and which directory its checks apply to.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct G8Layout {
+    pub g8_dir: PathBuf,
+    pub project_root: PathBuf,
+}
+
 /// Walk from `start` upward looking for `.g8/space.toml`, then `.g8/config.toml`
 /// (a legacy `.govern/` directory is accepted at each level).
-/// Returns the directory containing the first `.g8/` match, joining `.g8/`.
 ///
-/// Falls back to `start/.g8/` if neither is found.
-pub fn resolve_g8_dir(start: &Path) -> Result<PathBuf> {
+/// `.g8/` is not tracked, so a linked git worktree has none of its own. When
+/// the walk reaches a worktree's top level without a match there, the main
+/// checkout's `.g8/` (found through the git common dir) is used, and the
+/// project root stays the worktree, so checks read the worktree's files
+/// against the shared store.
+///
+/// Falls back to `start/.g8/` if nothing is found.
+pub fn resolve_g8_layout(start: &Path) -> Result<G8Layout> {
     let mut dir = start.to_path_buf();
     loop {
-        // `.g8/` is the current name; `.govern/` is accepted for projects set up
-        // before the rename, so an existing store keeps working without a move.
-        for name in [".g8", ".govern"] {
-            let candidate = dir.join(name);
-            if candidate.join("space.toml").exists() || candidate.join("config.toml").exists() {
-                return Ok(candidate);
+        if let Some(g8_dir) = g8_dir_at(&dir) {
+            return Ok(G8Layout {
+                g8_dir,
+                project_root: dir,
+            });
+        }
+        if let Some(main) = main_checkout_of_linked_worktree(&dir) {
+            if let Some(g8_dir) = g8_dir_at(&main) {
+                return Ok(G8Layout {
+                    g8_dir,
+                    project_root: dir,
+                });
             }
         }
         if !dir.pop() {
             // Reached fs root without finding anything — fall back to cwd.
-            return Ok(start.join(".g8"));
+            return Ok(G8Layout {
+                g8_dir: start.join(".g8"),
+                project_root: start.to_path_buf(),
+            });
         }
     }
+}
+
+/// The initialised `.g8/` (or legacy `.govern/`) directly under `dir`, if any.
+fn g8_dir_at(dir: &Path) -> Option<PathBuf> {
+    // `.g8/` is the current name; `.govern/` is accepted for projects set up
+    // before the rename, so an existing store keeps working without a move.
+    [".g8", ".govern"]
+        .into_iter()
+        .map(|name| dir.join(name))
+        .find(|candidate| {
+            candidate.join("space.toml").exists() || candidate.join("config.toml").exists()
+        })
+}
+
+/// If `dir` is the top level of a linked git worktree, the main checkout's
+/// working directory.
+///
+/// A linked worktree's `.git` is a file, `gitdir: <repo>/.git/worktrees/<name>`,
+/// and that directory's `commondir` names the shared git dir. Submodules also
+/// use a `.git` file but have no `commondir`, so they are not matched. A bare
+/// common dir has no working tree and yields `None`.
+fn main_checkout_of_linked_worktree(dir: &Path) -> Option<PathBuf> {
+    let dot_git = dir.join(".git");
+    if !dot_git.is_file() {
+        return None;
+    }
+    let content = std::fs::read_to_string(&dot_git).ok()?;
+    let gitdir = content
+        .lines()
+        .find_map(|l| l.strip_prefix("gitdir:"))?
+        .trim();
+    let gitdir = dir.join(gitdir);
+    let commondir = std::fs::read_to_string(gitdir.join("commondir")).ok()?;
+    let common = gitdir.join(commondir.trim()).canonicalize().ok()?;
+    if common.file_name()? != ".git" {
+        return None;
+    }
+    common.parent().map(Path::to_path_buf)
 }
 
 // ── Config ────────────────────────────────────────────────────────────────────
@@ -279,6 +347,101 @@ pub fn require_init(ctx: &Ctx) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn git(dir: &Path, args: &[&str]) {
+        let status = std::process::Command::new("git")
+            .current_dir(dir)
+            .args([
+                "-c",
+                "user.name=t",
+                "-c",
+                "user.email=t@t",
+                "-c",
+                "init.defaultBranch=main",
+            ])
+            .args(args)
+            .status()
+            .expect("git runs");
+        assert!(status.success(), "git {args:?}");
+    }
+
+    /// A main checkout with an initialised `.g8/` and a linked worktree beside it.
+    fn repo_with_worktree() -> (tempfile::TempDir, PathBuf, PathBuf) {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let base = tmp.path().canonicalize().expect("canonical tempdir");
+        let main = base.join("main");
+        std::fs::create_dir(&main).expect("main dir");
+        git(&main, &["init", "-q"]);
+        std::fs::write(main.join("README"), "x").expect("write");
+        git(&main, &["add", "README"]);
+        git(&main, &["commit", "-qm", "init"]);
+        std::fs::create_dir(main.join(".g8")).expect(".g8");
+        std::fs::write(main.join(".g8/config.toml"), "[g8]\n").expect("config");
+        let wt = base.join("wt");
+        git(&main, &["worktree", "add", "-q", wt.to_str().unwrap()]);
+        (tmp, main, wt)
+    }
+
+    #[test]
+    fn linked_worktree_uses_main_checkout_g8_and_keeps_its_own_root() {
+        let (_tmp, main, wt) = repo_with_worktree();
+        let sub = wt.join("src/deep");
+        std::fs::create_dir_all(&sub).expect("subdir");
+        let expected = G8Layout {
+            g8_dir: main.join(".g8"),
+            project_root: wt.clone(),
+        };
+        assert_eq!(resolve_g8_layout(&wt).unwrap(), expected);
+        assert_eq!(resolve_g8_layout(&sub).unwrap(), expected);
+    }
+
+    #[test]
+    fn worktree_own_g8_takes_precedence() {
+        let (_tmp, _main, wt) = repo_with_worktree();
+        std::fs::create_dir(wt.join(".g8")).expect(".g8");
+        std::fs::write(wt.join(".g8/config.toml"), "[g8]\n").expect("config");
+        assert_eq!(
+            resolve_g8_layout(&wt).unwrap(),
+            G8Layout {
+                g8_dir: wt.join(".g8"),
+                project_root: wt.clone(),
+            }
+        );
+    }
+
+    #[test]
+    fn main_checkout_resolves_as_before() {
+        let (_tmp, main, _wt) = repo_with_worktree();
+        assert_eq!(
+            resolve_g8_layout(&main).unwrap(),
+            G8Layout {
+                g8_dir: main.join(".g8"),
+                project_root: main.clone(),
+            }
+        );
+    }
+
+    #[test]
+    fn git_file_without_commondir_is_not_a_worktree() {
+        // Submodule shape: `.git` is a file, but its gitdir has no `commondir`.
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let base = tmp.path().canonicalize().expect("canonical tempdir");
+        let modules = base.join("super/.git/modules/sub");
+        std::fs::create_dir_all(&modules).expect("modules");
+        std::fs::create_dir(base.join("super/.g8")).expect(".g8");
+        std::fs::write(base.join("super/.g8/config.toml"), "[g8]\n").expect("config");
+        let sub = base.join("elsewhere/sub");
+        std::fs::create_dir_all(&sub).expect("sub");
+        std::fs::write(sub.join(".git"), format!("gitdir: {}\n", modules.display()))
+            .expect("git file");
+        assert_eq!(
+            resolve_g8_layout(&sub).unwrap(),
+            G8Layout {
+                g8_dir: sub.join(".g8"),
+                project_root: sub.clone(),
+            }
+        );
+    }
 
     #[test]
     fn load_config_reads_legacy_govern_table() {

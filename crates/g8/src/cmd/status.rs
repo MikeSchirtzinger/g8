@@ -21,7 +21,7 @@ pub fn run(ctx: &Ctx, args: &StatusArgs) -> Result<i32> {
     require_init(ctx)?;
 
     let store = ctx.open_store()?;
-    let root = ctx.g8_dir.parent().unwrap_or(&ctx.g8_dir);
+    let root = ctx.project_root.as_path();
 
     if !args.no_regen {
         regenerate_intent_summary(ctx, &store, root)

@@ -16,7 +16,7 @@ pub fn run(ctx: &Ctx, args: &ScanArgs) -> Result<i32> {
     let root: PathBuf = args
         .path
         .clone()
-        .unwrap_or_else(|| ctx.g8_dir.parent().unwrap_or(&ctx.g8_dir).to_path_buf());
+        .unwrap_or_else(|| ctx.project_root.clone());
     let root = root.canonicalize().unwrap_or(root);
 
     // Run extractor.
@@ -81,7 +81,7 @@ pub fn run(ctx: &Ctx, args: &ScanArgs) -> Result<i32> {
         .context("applying scan to store")?;
 
     // Regenerate INTENT_SUMMARY.md
-    let root_path = ctx.g8_dir.parent().unwrap_or(&ctx.g8_dir);
+    let root_path = ctx.project_root.as_path();
     crate::cmd::status::regenerate_intent_summary(ctx, &store, root_path)
         .unwrap_or_else(|e| eprintln!("warn: could not regenerate INTENT_SUMMARY.md: {e:#}"));
 

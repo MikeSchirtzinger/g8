@@ -590,3 +590,44 @@ fn test_full_round_trip_empty_dir() {
         serde_json::from_str(&stdout).expect("check --json must be valid JSON");
     assert_eq!(json["g8_version"], env!("CARGO_PKG_VERSION"));
 }
+
+/// `.g8/` is untracked, so a linked worktree has none. `g8 check` there must
+/// use the main checkout's store rather than fail with ".g8/ not found",
+/// which is what blocked the pre-commit hook in worktrees.
+#[test]
+fn test_check_in_linked_worktree_uses_main_checkout_store() {
+    let (_dir, main) = init_temp_project();
+    let git = |dir: &std::path::Path, args: &[&str]| {
+        let status = Command::new("git")
+            .current_dir(dir)
+            .args([
+                "-c",
+                "user.name=t",
+                "-c",
+                "user.email=t@t",
+                "-c",
+                "init.defaultBranch=main",
+            ])
+            .args(args)
+            .status()
+            .expect("git runs");
+        assert!(status.success(), "git {args:?}");
+    };
+    git(&main, &["init", "-q"]);
+    std::fs::write(main.join("README"), "x").expect("write");
+    git(&main, &["add", "README"]);
+    git(&main, &["commit", "-qm", "init"]);
+    let wt_parent = TempDir::new().expect("temp dir");
+    let wt = wt_parent.path().join("wt");
+    git(&main, &["worktree", "add", "-q", wt.to_str().unwrap()]);
+    assert!(!wt.join(".g8").exists());
+
+    g8().current_dir(&wt)
+        .args(["check", "--json"])
+        .assert()
+        .success();
+    assert!(
+        !wt.join(".g8").exists(),
+        "check must not create a worktree store"
+    );
+}

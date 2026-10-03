@@ -133,10 +133,7 @@ fn read_lock(project_root: &Path) -> std::result::Result<(&'static str, String),
 }
 
 pub fn project_root(ctx: &Ctx) -> Result<PathBuf> {
-    ctx.g8_dir
-        .parent()
-        .map(Path::to_path_buf)
-        .context("resolved .g8 directory has no project root")
+    Ok(ctx.project_root.clone())
 }
 
 #[cfg(test)]
