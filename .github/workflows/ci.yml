@@ -43,11 +43,14 @@ jobs:
       # `rg_match_count` to ripgrep. tests/cli.rs drives the real binary, so
       # without these the CLI tests fail on a missing tool rather than on a
       # real regression. The npm build of ast-grep is a prebuilt binary, so
-      # this costs seconds where `cargo install` costs minutes.
+      # this costs seconds where `cargo install` costs minutes. ast-grep is
+      # pinned: `scope.function` depends on tree-sitter node kind and field
+      # names (function_item, function_definition, method_declaration, ...),
+      # and `scan`'s exit-code behavior. Bump it deliberately, with the tests.
       - name: Install checker tools (ripgrep, ast-grep)
         shell: bash
         run: |
-          npm install -g @ast-grep/cli
+          npm install -g @ast-grep/cli@0.45.3
           if [ "$RUNNER_OS" = "Linux" ]; then
             sudo apt-get update && sudo apt-get install -y ripgrep
           else
@@ -112,7 +115,7 @@ jobs:
       - name: Install checker tools (ripgrep, ast-grep)
         run: |
           sudo apt-get update && sudo apt-get install -y ripgrep
-          cargo install ast-grep --locked
+          cargo install ast-grep --version 0.45.3 --locked
 
       - name: Run the full real-artifact obligations test
         run: cargo test -p g8 --test obligations_check -- --ignored --nocapture
