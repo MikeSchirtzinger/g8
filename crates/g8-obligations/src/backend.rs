@@ -213,6 +213,21 @@ impl AstGrepLang {
             AstGrepLang::Go => "go",
         }
     }
+
+    /// Tree-sitter node kinds that define a named function in this
+    /// language, the `kind` alternatives of the inline `ast-grep scan` rule
+    /// that resolves `scope.function` (each kind carries the function's name
+    /// in its `name` field). TypeScript arrow functions assigned to a
+    /// `const` are a `variable_declarator`, not one of these, and are not
+    /// resolved.
+    pub fn function_kinds(self) -> &'static [&'static str] {
+        match self {
+            AstGrepLang::Rust => &["function_item"],
+            AstGrepLang::Python => &["function_definition"],
+            AstGrepLang::TypeScript => &["function_declaration", "method_definition"],
+            AstGrepLang::Go => &["function_declaration", "method_declaration"],
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -242,7 +257,13 @@ pub struct AstGrepCountArgs {
     pub pattern: String,
     pub lang: AstGrepLang,
     pub glob: Vec<String>,
-    /// Restrict the match to inside one named function/impl block.
+    /// Restrict the match to inside one named function: a match counts
+    /// when its start line falls inside a definition of that name (any
+    /// [`AstGrepLang::function_kinds`] node: free functions and methods).
+    /// A name defined more than once in the glob scopes to the union of
+    /// every definition's span. The name must match
+    /// `^[A-Za-z_$][A-Za-z0-9_$]*$`; anything else, or a name with no
+    /// definition in the glob, is a checker `Error`, never a zero count.
     #[serde(default)]
     pub scope: Option<FnScope>,
     pub expected: CountExpectation,
