@@ -1,6 +1,6 @@
-//! Lightweight, dependency-free Rust source scanning: locate an enum's or
-//! function's body via brace-balance counting, extract struct/enum/type
-//! declaration names, split an enum body into top-level variant segments.
+//! Lightweight, dependency-free Rust source scanning: locate an enum's body
+//! via brace-balance counting, extract struct/enum/type declaration names,
+//! split an enum body into top-level variant segments.
 //!
 //! Deliberately NOT ast-grep for these: empirically verified against this
 //! repo that ast-grep's pattern inference for bare `struct $NAME` / `enum
@@ -34,15 +34,17 @@ use regex::Regex;
 /// the real generic definition (`pub fn plan_check<S>(...)` at line 145) —
 /// so the scope-finder anchored on the comment's prose instead, producing a
 /// scope span that excluded the function's real body entirely (T2c erratum
-/// item 3 / T3b task brief).
+/// item 3 / T3b task brief). `scope.function` has since moved to ast-grep
+/// (`exec::ast_grep::find_function_spans`); the mask still guards
+/// `find_enum_anchor_byte`.
 ///
 /// Building this as a separate mask alongside the string (rather than
 /// rewriting the string in place) is what keeps this UTF-8-safe: this
 /// codebase's doc comments contain multi-byte characters (`§`, `…`) that a
 /// byte-level in-place blank-out could corrupt mid-character. The mask never
-/// touches `content` itself, only marks it — `find_fn_anchor_byte`/
-/// `find_enum_anchor_byte` then filter regex matches (found against the
-/// original, un-rewritten string) by whether their start byte is real code.
+/// touches `content` itself, only marks it — `find_enum_anchor_byte` then
+/// filters regex matches (found against the original, un-rewritten string)
+/// by whether their start byte is real code.
 fn real_code_mask(content: &str) -> Vec<bool> {
     let bytes = content.as_bytes();
     let mut mask = vec![true; bytes.len()];
@@ -224,25 +226,6 @@ pub(crate) fn find_enum_body(content: &str, enum_name: &str) -> Option<(String, 
     find_block_after_byte(content, anchor)
 }
 
-/// Find the 1-based [start_line, end_line] of `fn <name>`'s body.
-///
-/// Comment/string-aware (`find_in_real_code`) — a plain `Regex::find` here
-/// is exactly the bug T2c/T3b's task brief describes: `g8-planner::
-/// plan_check`'s own doc comment quotes ARCHITECTURE.md's (stale) signature
-/// `pub fn plan_check(store: &dyn StoreConnection, ...)` as prose, which a
-/// naive regex search matches BEFORE the real `pub fn plan_check<S>(...)`
-/// definition 126 lines later — anchoring the scope span on the comment,
-/// not the function, so a real call inside the real body (`store.
-/// planner_intent_check(draft)`, line 159) was scored as outside scope.
-/// Confirmed live against the real file before this fix; regression-tested
-/// below (`scope_finder_skips_a_doc_comment_that_mentions_the_function`).
-pub(crate) fn find_function_line_span(content: &str, fn_name: &str) -> Option<(u32, u32)> {
-    let re = Regex::new(&format!(r"\bfn\s+{}\s*[<(]", regex::escape(fn_name))).ok()?;
-    let m = find_in_real_code(content, &re)?;
-    let (_, start_line, end_line) = find_block_after_byte(content, m.start())?;
-    Some((start_line, end_line))
-}
-
 /// The nearest `#[serde(rename_all = "...")]` attribute strictly before
 /// `anchor_byte`, provided nothing but whitespace/attributes/doc-comments —
 /// i.e. no `}` — separates it from the anchor (a `}` would mean we crossed
@@ -366,120 +349,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn scope_finder_skips_a_doc_comment_that_mentions_the_function() {
-        // Reproduces the exact real bug (T2c erratum / T3b task brief):
-        // `g8-planner::plan_check`'s own module doc comment quotes
-        // ARCHITECTURE.md's stale, non-generic signature as prose, well
-        // before the real generic definition. A plain regex search anchors
-        // on the comment; `find_in_real_code` must skip past it. Also
-        // exercises the exact real characters that make a naive
-        // string-rewrite approach unsafe here (`§`, `…`).
-        let content = concat!(
-            "//! ARCHITECTURE.md §3.4 specifies `pub fn plan_check(store: &dyn StoreConnection, …)`.\n",
-            "//! The real signature differs.\n",
-            "\n",
-            "pub fn other() {\n",
-            "    1\n",
-            "}\n",
-            "\n",
-            "pub fn plan_check<S>(store: &S, draft: &PlanDraft) -> Result<FitReport, PlannerError>\n",
-            "where\n",
-            "    S: StoreConnection,\n",
-            "{\n",
-            "    let raw = store.planner_intent_check(draft)?;\n",
-            "    Ok(raw)\n",
-            "}\n",
-        );
-        let (start, end) = find_function_line_span(content, "plan_check")
-            .expect("must find the real definition, not the comment");
-        // Real definition starts at line 8 ("pub fn plan_check<S>...").
-        assert_eq!(
-            start, 8,
-            "anchored on the doc comment instead of the real fn"
-        );
-        assert_eq!(end, 14);
-        // And the real call site (line 12) must fall inside that span.
-        assert!((start..=end).contains(&12));
-    }
-
-    #[test]
-    fn scope_finder_regression_against_the_real_g8_planner_file() {
-        // The exact real-world case, end to end: `crates/g8-planner/src/
-        // lib.rs`'s `plan_check<S>` (line 145) and its one real call to
-        // `store.planner_intent_check(draft)` (line 159) — both genuinely
-        // present, verified live before this fix landed.
-        let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .parent()
-            .unwrap()
-            .parent()
-            .unwrap()
-            .join("crates/g8-planner/src/lib.rs");
-        let content = std::fs::read_to_string(&root).unwrap();
-        let (start, end) =
-            find_function_line_span(&content, "plan_check").expect("plan_check must be found");
-        assert!(
-            (start..=end).contains(&159),
-            "expected line 159 (the real store.planner_intent_check call) inside scope {start}..={end}"
-        );
-    }
-
-    #[test]
-    fn scope_finder_handles_non_generic_function() {
-        let content = "fn plain(x: i32) -> i32 {\n    x + 1\n}\n";
-        let (start, end) = find_function_line_span(content, "plain").unwrap();
-        assert_eq!((start, end), (1, 3));
-    }
-
-    #[test]
-    fn scope_finder_handles_method_in_impl_block() {
-        // A method defined inside `impl Foo { ... }` — same textual shape as
-        // a free function from this scanner's point of view (no special
-        // impl-block awareness needed), but explicitly named/tested per
-        // an explicit review request rather than left implicit.
-        let content = concat!(
-            "struct Foo;\n",
-            "\n",
-            "impl Foo {\n",
-            "    fn new() -> Self {\n",
-            "        Foo\n",
-            "    }\n",
-            "\n",
-            "    pub fn compute(&self, x: i32) -> i32 {\n",
-            "        let y = self.helper(x);\n",
-            "        y + 1\n",
-            "    }\n",
-            "\n",
-            "    fn helper(&self, x: i32) -> i32 {\n",
-            "        x * 2\n",
-            "    }\n",
-            "}\n",
-        );
-        let (start, end) = find_function_line_span(content, "compute").unwrap();
-        assert_eq!((start, end), (8, 11));
-        // And the call to `helper` genuinely falls inside that span.
-        assert!((start..=end).contains(&9));
-    }
-
-    #[test]
-    fn scope_finder_handles_lifetimes_and_where_clause() {
-        // Generic params, an explicit lifetime, AND a where-clause together
-        // — the fullest realistic signature shape, not just the bare
-        // `<S>` case `plan_check` itself happens to use.
-        let content = concat!(
-            "fn complex<'a, S>(store: &'a S, draft: &'a PlanDraft) -> Result<FitReport, PlannerError>\n",
-            "where\n",
-            "    S: StoreConnection + 'a,\n",
-            "{\n",
-            "    let raw = store.planner_intent_check(draft)?;\n",
-            "    Ok(raw)\n",
-            "}\n",
-        );
-        let (start, end) = find_function_line_span(content, "complex").unwrap();
-        assert_eq!((start, end), (1, 7));
-        assert!((start..=end).contains(&5));
-    }
-
-    #[test]
     fn finds_simple_enum_body() {
         let content = "enum Foo {\n    A,\n    B,\n}\n";
         let (body, start, end) = find_enum_body(content, "Foo").unwrap();
@@ -495,19 +364,6 @@ mod tests {
         let (body, _, end) = find_enum_body(content, "Foo").unwrap();
         assert!(body.contains('A') && body.contains('B'));
         assert_eq!(end, 5);
-    }
-
-    #[test]
-    fn find_function_span_locates_real_function() {
-        let content = "fn outer() {\n    1\n}\n\nfn target(x: i32) -> i32 {\n    if x > 0 {\n        x\n    } else {\n        0\n    }\n}\n";
-        let (start, end) = find_function_line_span(content, "target").unwrap();
-        assert_eq!(start, 5);
-        assert_eq!(end, 11);
-    }
-
-    #[test]
-    fn find_function_span_missing_function_is_none() {
-        assert!(find_function_line_span("fn other() {}\n", "target").is_none());
     }
 
     #[test]

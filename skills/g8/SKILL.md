@@ -174,6 +174,13 @@ Shared arg shapes:
     "glob": ["crates/x/src/**"], "exclude_glob": [], "capture_predicate": null } }
 
 // 5. ast_grep_match_count, AST match count, optionally scoped to one function.
+//    scope.function works for every lang (rust, python, typescript, go): free
+//    functions and methods (Python async/decorated defs, TS class methods, Go
+//    receiver methods). A match counts when it starts inside the function. A
+//    name defined more than once in the glob scopes to the UNION of its
+//    definitions (detail.scope_spans lists each). The name must match
+//    ^[A-Za-z_$][A-Za-z0-9_$]*$; a bad name or a name not found is an Error.
+//    Not resolved: TS arrow functions assigned to a const.
 { "backend": "ast_grep_match_count", "args": {
     "pattern": "store.$METHOD($$$ARGS)", "lang": "rust", "glob": ["src/lib.rs"],
     "scope": {"function": "plan_check"}, "expected": {"kind":"exactly","value":1},
