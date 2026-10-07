@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.4] - 2026-10-07
+
 ### Added
 
 - `receipt_query` paths support recursive descent and wildcards. `..key`
@@ -43,6 +45,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- A `fixture_integration_test` invocation with `binary: cargo_run` builds in
+  `<target>/g8-cargo-run` instead of the workspace target dir. A `cargo run`
+  with another feature set relinked `debug/g8` while `g8 check` was running
+  from it, so every `current_exe` fixture after the repo's own D7-01 spawned
+  a deleted binary and errored with ENOENT. The repo's own gate exits 0
+  again; its 15 attestation pins recorded at 0.1.0 are re-pinned.
+- CI pins ast-grep to 0.45.3, the version the scope resolver's node kinds
+  were verified against.
 - `ast_grep_match_count` with `scope: {"function": "<name>"}` only worked for
   Rust: the span was found by a Rust-only `fn name(` text scan, so for
   `lang: python|typescript|go` the check errored with `function X not found
