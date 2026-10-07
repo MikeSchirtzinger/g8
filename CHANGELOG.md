@@ -8,6 +8,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- `ast_grep_match_count` with `scope: {"function": "<name>"}` only worked for
+  Rust: the span was found by a Rust-only `fn name(` text scan, so for
+  `lang: python|typescript|go` the check errored with `function X not found
+  in glob`. The scope is now resolved by one `ast-grep scan --inline-rules`
+  call whose rule is built in memory from typed fields (never a rule file on
+  disk) and matches each language's function node kinds by name: Rust
+  functions and methods, Python `def` and `async def` (decorated, annotated,
+  methods), TypeScript function declarations and class methods, Go functions
+  and receiver methods. Comments that quote a signature are never a
+  definition.
+- A `scope.function` name defined more than once in the glob now scopes to
+  the union of all its definitions, each listed in the check's
+  `scope_spans` detail. The Rust scanner used the first definition per file.
+- A `scope.function` name that does not match `^[A-Za-z_$][A-Za-z0-9_$]*$`
+  is a checker `Error` naming that rule. `ast-grep scan` exits 0 even when
+  it cannot read a path, so any stderr output from the scope lookup is an
+  `Error` too, never a zero count.
+
+### Known gaps
+
+- `scope.function` does not resolve TypeScript arrow functions assigned to a
+  `const` (`const f = () => {}`), which are variable declarators rather than
+  function declarations.
+
 ## [0.1.3] - 2026-10-07
 
 ### Fixed
