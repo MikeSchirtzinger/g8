@@ -8,6 +8,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-10-07
+
+### Fixed
+
+- `receipt_query` passed silently on path syntax the resolver does not
+  implement. A `select` of `$..claims[*]` or a `where` path such as
+  `$.claims[*].kind` resolved to nothing, so an `expected: zero` gate read as
+  a pass against a receipt full of violations. Unsupported syntax (`..`, a
+  `[*]` anywhere but as the trailing explosion of `select`, empty segments,
+  unclosed or non-numeric brackets) is now a checker `Error` in `select`,
+  `where` and `sum` paths, in the same way `byte_diff_twice` already refuses
+  an unsupported `normalize_paths` form. Recursive descent is not implemented
+  yet; it is refused rather than guessed.
+- Linked git worktrees: `.g8/` is resolved through the git common dir, so
+  `g8 check` and the pre-commit hook work in a worktree that has no `.g8/`
+  of its own.
+- Stores written by g8 0.1.0 open again after the V1 migration was restored
+  to govern's bytes.
+
 ## [0.1.2] - 2026-09-18
 
 All seven crates move to one workspace version from this release on.

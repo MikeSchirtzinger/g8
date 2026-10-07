@@ -1004,9 +1004,7 @@ fn store_written_by_g8_0_1_0_opens_and_migrates() {
 
     {
         let mut store = RusqliteStore::open(&path).expect("open");
-        store
-            .migrate()
-            .expect("a store created by g8 0.1.0 opens");
+        store.migrate().expect("a store created by g8 0.1.0 opens");
         store.migrate().expect("second open is a no-op");
     }
 
@@ -1021,7 +1019,10 @@ fn store_written_by_g8_0_1_0_opens_and_migrates() {
     assert_eq!(history.len(), 2, "V2 applied");
     assert_eq!(
         history[0],
-        (1, g8_store::migrations::GOVERN_0_1_0_V1_CHECKSUM.to_string())
+        (
+            1,
+            g8_store::migrations::GOVERN_0_1_0_V1_CHECKSUM.to_string()
+        )
     );
     let kind: String = conn
         .query_row("SELECT source_kind FROM intent WHERE id='in1'", [], |r| {

@@ -62,6 +62,75 @@ fn resolve_segment<'a>(current: &'a Value, segment: &str) -> Option<&'a Value> {
     Some(result)
 }
 
+/// Rejects path syntax this resolver does not implement, so a gate written
+/// in a richer dialect errors instead of silently matching nothing.
+///
+/// `resolve_json_path` answers `None` for any path it cannot follow, which
+/// is right for a key that is absent and wrong for syntax it never parsed:
+/// `$..claims[*]` split into an empty segment and resolved to nothing, so a
+/// `receipt_query` with `expected: zero` passed against a receipt full of
+/// violations (found 2026-10-07 on 0.1.2). Recursive descent (`..`) and a
+/// wildcard anywhere but as `select`'s trailing explosion (`[*]`) are the
+/// two forms callers reach for; both are refused here until the resolver
+/// implements them. Empty segments (`$.a..b`, `$.`), unclosed brackets and
+/// non-numeric indices are refused for the same reason.
+pub(crate) fn validate_supported_path(path: &str) -> Result<(), String> {
+    let refuse = |why: &str| {
+        Err(format!(
+            "unsupported path syntax `{path}`: {why}; the resolver supports `$.key.key[0]` forms only, \
+             and a path it cannot parse must not read as \"matches nothing\""
+        ))
+    };
+    if path.contains("..") {
+        return refuse("recursive descent `..` is not implemented");
+    }
+    if path.contains("[*]") {
+        return refuse("wildcard `[*]` is only accepted as the trailing explosion of `select`");
+    }
+    let trimmed = path.strip_prefix('$').unwrap_or(path);
+    if trimmed.is_empty() {
+        return Ok(());
+    }
+    let Some(trimmed) = trimmed.strip_prefix('.') else {
+        if path.starts_with('$') {
+            return refuse("`$` must be followed by `.`");
+        }
+        return validate_segments(trimmed, refuse);
+    };
+    validate_segments(trimmed, refuse)
+}
+
+fn validate_segments(
+    trimmed: &str,
+    refuse: impl Fn(&str) -> Result<(), String>,
+) -> Result<(), String> {
+    if trimmed.is_empty() {
+        return refuse("trailing `.` leaves an empty segment");
+    }
+    for segment in trimmed.split('.') {
+        if segment.is_empty() {
+            return refuse("empty segment");
+        }
+        let Some(bracket_start) = segment.find('[') else {
+            continue;
+        };
+        let mut rest = &segment[bracket_start..];
+        while let Some(after_open) = rest.strip_prefix('[') {
+            let Some(close) = after_open.find(']') else {
+                return refuse("unclosed `[`");
+            };
+            if after_open[..close].parse::<usize>().is_err() {
+                return refuse("a bracket index must be a non-negative integer");
+            }
+            rest = &after_open[close + 1..];
+        }
+        if !rest.is_empty() {
+            return refuse("text after a closing `]`");
+        }
+    }
+    Ok(())
+}
+
 /// Looks up `key` in `current` — as an array index if `key` parses as a
 /// plain non-negative integer, otherwise as an object key.
 fn index_into<'a>(current: &'a Value, key: &str) -> Option<&'a Value> {

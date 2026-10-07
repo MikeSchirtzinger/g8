@@ -22,7 +22,7 @@ use crate::backend::{ReceiptAggregate, ReceiptQueryArgs, WhereClause, WhereOp};
 use crate::result::ObligationStatus;
 use crate::ReceiptSubject;
 
-use super::json_path::resolve_json_path;
+use super::json_path::{resolve_json_path, validate_supported_path};
 
 pub(crate) fn run(
     args: &ReceiptQueryArgs,
@@ -45,7 +45,35 @@ pub(crate) fn run(
 }
 
 fn evaluate(args: &ReceiptQueryArgs, root: &Value) -> (ObligationStatus, Value) {
-    let candidates = select_candidates(root, &args.select);
+    // Unsupported path syntax anywhere in the query is a checker Error, never a
+    // silent "matched nothing": a `$..` select with `expected: zero` read as a
+    // pass on 0.1.2 (the fail-open fixed in 0.1.3). Clause and sum paths are
+    // validated up front for the same reason, before any candidate is looked at.
+    let candidates = match select_candidates(root, &args.select) {
+        Ok(candidates) => candidates,
+        Err(error) => {
+            return (
+                ObligationStatus::Error,
+                serde_json::json!({ "error": error }),
+            )
+        }
+    };
+    for clause in &args.where_clauses {
+        if let Err(error) = validate_supported_path(&clause.path) {
+            return (
+                ObligationStatus::Error,
+                serde_json::json!({ "error": error, "where": clause.path }),
+            );
+        }
+    }
+    if let ReceiptAggregate::Sum { path } = &args.aggregate {
+        if let Err(error) = validate_supported_path(path) {
+            return (
+                ObligationStatus::Error,
+                serde_json::json!({ "error": error, "sum": path }),
+            );
+        }
+    }
 
     let mut matched: Vec<&Value> = Vec::new();
     for candidate in &candidates {
@@ -118,12 +146,13 @@ fn aggregate_name(aggregate: &ReceiptAggregate) -> &'static str {
 /// the sole candidate — e.g. `$.meta.run_id` (a single string) never needs
 /// `[*]`. A path that does not resolve at all yields zero candidates,
 /// regardless of `[*]`.
-fn select_candidates<'a>(root: &'a Value, select: &str) -> Vec<&'a Value> {
+fn select_candidates<'a>(root: &'a Value, select: &str) -> Result<Vec<&'a Value>, String> {
     let (base_path, explode) = match select.strip_suffix("[*]") {
         Some(base) => (base, true),
         None => (select, false),
     };
-    match resolve_json_path(root, base_path) {
+    validate_supported_path(base_path)?;
+    Ok(match resolve_json_path(root, base_path) {
         None => vec![],
         Some(node) => {
             if explode {
@@ -135,7 +164,7 @@ fn select_candidates<'a>(root: &'a Value, select: &str) -> Vec<&'a Value> {
                 vec![node]
             }
         }
-    }
+    })
 }
 
 fn clauses_match(clauses: &[WhereClause], candidate: &Value) -> Result<bool, String> {
@@ -286,14 +315,14 @@ mod tests {
     #[test]
     fn select_with_star_explodes_array_into_candidates() {
         let root = receipt();
-        let candidates = select_candidates(&root, "$.actions[*]");
+        let candidates = select_candidates(&root, "$.actions[*]").unwrap();
         assert_eq!(candidates.len(), 5);
     }
 
     #[test]
     fn select_without_star_treats_whole_array_as_one_candidate() {
         let root = receipt();
-        let candidates = select_candidates(&root, "$.actions");
+        let candidates = select_candidates(&root, "$.actions").unwrap();
         assert_eq!(candidates.len(), 1);
         assert!(candidates[0].is_array());
     }
@@ -301,15 +330,19 @@ mod tests {
     #[test]
     fn select_single_node_is_the_sole_candidate() {
         let root = receipt();
-        let candidates = select_candidates(&root, "$.meta.run_id");
+        let candidates = select_candidates(&root, "$.meta.run_id").unwrap();
         assert_eq!(candidates, vec![&json!("run-1")]);
     }
 
     #[test]
     fn select_missing_path_yields_zero_candidates() {
         let root = receipt();
-        assert!(select_candidates(&root, "$.nonexistent[*]").is_empty());
-        assert!(select_candidates(&root, "$.nonexistent").is_empty());
+        assert!(select_candidates(&root, "$.nonexistent[*]")
+            .unwrap()
+            .is_empty());
+        assert!(select_candidates(&root, "$.nonexistent")
+            .unwrap()
+            .is_empty());
     }
 
     #[test]
@@ -317,7 +350,7 @@ mod tests {
         let root = receipt();
         // `[*]` on a path that resolves to a non-array (defensive fallback,
         // not an error): the resolved node itself is the sole candidate.
-        let candidates = select_candidates(&root, "$.meta.run_id[*]");
+        let candidates = select_candidates(&root, "$.meta.run_id[*]").unwrap();
         assert_eq!(candidates, vec![&json!("run-1")]);
     }
 
@@ -758,5 +791,69 @@ mod tests {
         // The one "post" action DOES have escalate: true, so zero posts
         // violate the rule.
         assert_eq!(status, ObligationStatus::Passed);
+    }
+
+    // ── unsupported path syntax is an Error, never a silent pass (0.1.3) ──
+
+    #[test]
+    fn select_with_recursive_descent_is_refused() {
+        let root = receipt();
+        let err = select_candidates(&root, "$..actions[*]").unwrap_err();
+        assert!(err.contains("recursive descent"), "{err}");
+    }
+
+    #[test]
+    fn recursive_select_with_expected_zero_errors_instead_of_passing() {
+        // The 0.1.2 fail-open: three violations present, `$..` matched nothing, gate passed.
+        let root =
+            serde_json::json!({"claims": [{"kind": "bad"}, {"kind": "bad"}, {"kind": "bad"}]});
+        let args = ReceiptQueryArgs {
+            select: "$..claims[*]".into(),
+            where_clauses: vec![WhereClause {
+                path: "$.kind".into(),
+                op: WhereOp::Eq,
+                value: Some(serde_json::json!("bad")),
+            }],
+            aggregate: ReceiptAggregate::Count,
+            expected: ReceiptExpectation::Zero,
+        };
+        let (status, detail) = evaluate(&args, &root);
+        assert_eq!(status, ObligationStatus::Error, "{detail}");
+    }
+
+    #[test]
+    fn where_path_with_wildcard_errors_instead_of_passing() {
+        let root = serde_json::json!({"claims": [{"kind": "bad"}]});
+        let args = ReceiptQueryArgs {
+            select: "$".into(),
+            where_clauses: vec![WhereClause {
+                path: "$.claims[*].kind".into(),
+                op: WhereOp::Eq,
+                value: Some(serde_json::json!("bad")),
+            }],
+            aggregate: ReceiptAggregate::Count,
+            expected: ReceiptExpectation::Zero,
+        };
+        let (status, detail) = evaluate(&args, &root);
+        assert_eq!(status, ObligationStatus::Error, "{detail}");
+        assert!(
+            detail["error"].as_str().unwrap().contains("wildcard"),
+            "{detail}"
+        );
+    }
+
+    #[test]
+    fn sum_path_with_recursive_descent_errors() {
+        let root = serde_json::json!({"actions": [{"amount": 1}]});
+        let args = ReceiptQueryArgs {
+            select: "$.actions[*]".into(),
+            where_clauses: vec![],
+            aggregate: ReceiptAggregate::Sum {
+                path: "$..amount".into(),
+            },
+            expected: ReceiptExpectation::Zero,
+        };
+        let (status, _) = evaluate(&args, &root);
+        assert_eq!(status, ObligationStatus::Error);
     }
 }
