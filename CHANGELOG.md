@@ -8,6 +8,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- A file matched by `glob` that the checker cannot open is a checker `Error`
+  naming the file. `ast-grep` and `rg` print nothing for an unreadable file,
+  which read as a pass under `expected: zero` and as an undercount otherwise.
+  The check sits in `expand_glob`, so `ast_grep_no_match`,
+  `ast_grep_match_count`, `rg_match_count` and `vocabulary_drift` all refuse
+  it (#16).
+
 ## [0.1.4] - 2026-10-07
 
 ### Added

@@ -38,6 +38,17 @@ pub(crate) fn expand_glob(
         }
     }
     files.sort();
+    // A matched file the checker cannot open is an Error, never "no match":
+    // ast-grep and rg both print nothing for an unreadable file, which read
+    // as a pass under `zero` and as an undercount otherwise (issue #16).
+    for f in &files {
+        if let Err(e) = std::fs::File::open(f) {
+            return Err(format!(
+                "cannot read `{}`: {e}; an unreadable file is not \"no match\"",
+                relativize(f, workspace_root)
+            ));
+        }
+    }
     Ok(files)
 }
 
@@ -84,6 +95,30 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let files = expand_glob(dir.path(), &["nonexistent/**".to_string()], &[]).unwrap();
         assert!(files.is_empty());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn expand_glob_unreadable_file_is_an_error_not_no_match() {
+        use std::os::unix::fs::PermissionsExt;
+        // root reads anything; the check cannot be observed there.
+        if unsafe { libc_geteuid() } == 0 {
+            return;
+        }
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(dir.path().join("src")).unwrap();
+        let sealed = dir.path().join("src/sealed.rs");
+        std::fs::write(&sealed, "fn x() {}").unwrap();
+        std::fs::set_permissions(&sealed, std::fs::Permissions::from_mode(0o0)).unwrap();
+        let err = expand_glob(dir.path(), &["src/**/*.rs".to_string()], &[]).unwrap_err();
+        std::fs::set_permissions(&sealed, std::fs::Permissions::from_mode(0o644)).unwrap();
+        assert!(err.contains("cannot read `src/sealed.rs`"), "{err}");
+    }
+
+    #[cfg(unix)]
+    extern "C" {
+        #[link_name = "geteuid"]
+        fn libc_geteuid() -> u32;
     }
 
     #[test]

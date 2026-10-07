@@ -716,6 +716,37 @@ mod tests {
         assert_eq!(status, ObligationStatus::Error, "detail: {detail}");
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn match_count_unreadable_file_is_error_not_zero() {
+        // Issue #16: a file the checker cannot open must not read as "no match",
+        // which passes a `zero` expectation and undercounts everything else.
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        let sealed = dir.path().join("app.py");
+        std::fs::write(&sealed, "def handle(x):\n    return store.save(x)\n").unwrap();
+        std::fs::set_permissions(&sealed, std::fs::Permissions::from_mode(0o0)).unwrap();
+        let args = AstGrepCountArgs {
+            pattern: "store.save($$$A)".to_string(),
+            lang: AstGrepLang::Python,
+            glob: vec!["app.py".to_string()],
+            scope: None,
+            expected: CountExpectation::Zero,
+            capture_equals: None,
+        };
+        let (status, detail) = match_count(&args, dir.path());
+        std::fs::set_permissions(&sealed, std::fs::Permissions::from_mode(0o644)).unwrap();
+        if detail["error"]
+            .as_str()
+            .is_some_and(|e| e.contains("cannot read"))
+        {
+            assert_eq!(status, ObligationStatus::Error, "detail: {detail}");
+        } else {
+            // root can read a mode-0 file; then the honest result is the real count.
+            assert_eq!(status, ObligationStatus::Failed, "detail: {detail}");
+        }
+    }
+
     // ── scope.function across languages ──
     //
     // Each fixture defines the target function plus a decoy that makes the
