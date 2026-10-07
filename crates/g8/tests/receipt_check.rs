@@ -23,6 +23,10 @@
 //!    exhaustive per-op/missing-path/expectation-kind matrix lives in
 //!    `g8-obligations`'s own inline unit tests — this only proves the
 //!    wiring, not re-derives that matrix).
+//! 8. Recursive select: a `$..claims[*]` obligation with a `where` on
+//!    `$.check.kind` fails on a human gate claim nested under `claims` and
+//!    passes once it is removed; claims nested under `children` need a
+//!    `$..children[*]` obligation of their own.
 //! 9. Receipt-mode rigor floor (`Passed` + tier >= `Checked`, no
 //!    Verified/Asserted requirement) — proven by the clean-run test still
 //!    exiting 0 with zero `insufficient_rigor` despite every receipt
@@ -698,4 +702,158 @@ fn ac7_receipt_missing_the_selected_path_entirely_counts_as_zero_candidates() {
     ] {
         assert_eq!(by_id[id]["status"], "passed", "{id}: {}", by_id[id]);
     }
+}
+
+// ── Recursive select: `$..claims[*]` reaches claims at every depth. ──────
+
+/// No gate claim (`gate` absent or not `false`) may rest on a human check,
+/// at any depth. One obligation per nesting key: `$..claims[*]` reaches
+/// claims nested under `claims`, `$..children[*]` reaches claims nested
+/// under `children` (the handback receipt shape).
+const FIXTURE_ARTIFACT_NO_HUMAN_GATE: &str = r#"{
+  "meta": { "artifact": "g8-test-recursive-select", "version": "0.0.0-test" },
+  "obligations": [
+    {
+      "id": "OBL-RCPT-NOHUMAN-01",
+      "checker": {
+        "mode": "typed",
+        "checks": [
+          {
+            "backend": "receipt_query",
+            "args": {
+              "select": "$..claims[*]",
+              "where": [
+                { "path": "$.gate", "op": "ne", "value": false },
+                { "path": "$.check.kind", "op": "eq", "value": "human" }
+              ],
+              "aggregate": { "kind": "count" },
+              "expected": { "kind": "zero" }
+            }
+          }
+        ]
+      },
+      "signal": { "wiring": "action_receipt", "advisory": false }
+    },
+    {
+      "id": "OBL-RCPT-NOHUMAN-02",
+      "checker": {
+        "mode": "typed",
+        "checks": [
+          {
+            "backend": "receipt_query",
+            "args": {
+              "select": "$..children[*]",
+              "where": [
+                { "path": "$.gate", "op": "ne", "value": false },
+                { "path": "$.check.kind", "op": "eq", "value": "human" }
+              ],
+              "aggregate": { "kind": "count" },
+              "expected": { "kind": "zero" }
+            }
+          }
+        ]
+      },
+      "signal": { "wiring": "action_receipt", "advisory": false }
+    }
+  ],
+  "conflicts": [],
+  "open_questions": []
+}"#;
+
+fn check_receipt(path: &Path, name: &str, receipt: &serde_json::Value) -> (i32, serde_json::Value) {
+    let receipt_path = write_receipt(path, name, &receipt.to_string());
+    let output = g8()
+        .current_dir(path)
+        .args(["check", "--enforce", "--receipt"])
+        .arg(&receipt_path)
+        .output()
+        .unwrap();
+    let json: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&output.stdout))
+        .unwrap_or_else(|e| {
+            panic!(
+                "valid JSON on stdout ({e}); stderr: {}",
+                String::from_utf8_lossy(&output.stderr)
+            )
+        });
+    (output.status.code().expect("exit code"), json)
+}
+
+#[test]
+fn ac8_recursive_select_fails_on_a_nested_human_gate_claim_and_passes_without_it() {
+    let (_dir, path) = init_temp_project(false);
+    write_obligations_artifact(&path, FIXTURE_ARTIFACT_NO_HUMAN_GATE);
+    ratify(&path);
+
+    let mut receipt = serde_json::json!({
+        "handback": { "lane": "t", "task": "t", "commit": "c", "date": "2026-10-07" },
+        "claims": [
+            { "id": "C1", "statement": "s", "gate": true, "claims": [
+                { "id": "C1a", "statement": "s", "check": { "kind": "command", "argv": ["true"] } },
+                { "id": "C1b", "statement": "s", "gate": true, "claims": [
+                    { "id": "C1b-i", "statement": "s", "check": { "kind": "human", "question": "q" } }
+                ]}
+            ]},
+            { "id": "C2", "statement": "s", "gate": false, "check": { "kind": "human", "question": "q" } }
+        ]
+    });
+
+    let (code, json) = check_receipt(&path, "nested-human.json", &receipt);
+    assert_eq!(code, 1, "{json}");
+    let by_id = obligations_by_id(&json);
+    let nohuman = &by_id["OBL-RCPT-NOHUMAN-01"];
+    assert_eq!(nohuman["status"], "failed", "{nohuman}");
+    assert_eq!(
+        nohuman["evidence"]["detail"]["selected_count"], 5,
+        "{nohuman}"
+    );
+    assert_eq!(
+        nohuman["evidence"]["detail"]["matched_count"], 1,
+        "{nohuman}"
+    );
+    assert_eq!(
+        enforcement_failure_for(&json, "OBL-RCPT-NOHUMAN-01").expect("gate failure")
+            ["classification"],
+        "receipt_violation"
+    );
+
+    // Remove the nested human leaf (C1b-i); the info claim C2 stays.
+    receipt["claims"][0]["claims"][1]["claims"] = serde_json::json!([]);
+    let (code, json) = check_receipt(&path, "no-human.json", &receipt);
+    assert_eq!(code, 0, "{json}");
+    let by_id = obligations_by_id(&json);
+    assert_eq!(by_id["OBL-RCPT-NOHUMAN-01"]["status"], "passed");
+    assert_eq!(
+        by_id["OBL-RCPT-NOHUMAN-01"]["evidence"]["detail"]["selected_count"],
+        4
+    );
+}
+
+#[test]
+fn ac8_children_nesting_needs_its_own_selector() {
+    let (_dir, path) = init_temp_project(false);
+    write_obligations_artifact(&path, FIXTURE_ARTIFACT_NO_HUMAN_GATE);
+    ratify(&path);
+
+    let mut receipt = serde_json::json!({
+        "claims": [
+            { "id": "C1", "gate": true, "children": [
+                { "id": "C1a", "check": { "kind": "command", "argv": ["true"] } },
+                { "id": "C1b", "check": { "kind": "human", "question": "q" } }
+            ]}
+        ]
+    });
+
+    let (code, json) = check_receipt(&path, "children-human.json", &receipt);
+    assert_eq!(code, 1, "{json}");
+    let by_id = obligations_by_id(&json);
+    // `$..claims[*]` follows the key name and sees only C1, which has no check.
+    assert_eq!(by_id["OBL-RCPT-NOHUMAN-01"]["status"], "passed");
+    assert_eq!(by_id["OBL-RCPT-NOHUMAN-02"]["status"], "failed");
+
+    receipt["claims"][0]["children"]
+        .as_array_mut()
+        .unwrap()
+        .pop();
+    let (code, json) = check_receipt(&path, "children-clean.json", &receipt);
+    assert_eq!(code, 0, "{json}");
 }
