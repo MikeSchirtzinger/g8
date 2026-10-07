@@ -5,10 +5,14 @@
 //! [`crate::ReceiptSubject`]); this module only evaluates against the
 //! already-parsed `serde_json::Value`, never touches the filesystem itself.
 //!
-//! Path grammar reuses [`super::json_path`] verbatim (the same dialect
-//! `FixtureIntegrationTest`'s `JsonField`/`JsonPathNonEmpty` assertions use),
-//! plus one addition: a trailing `[*]` on `select` explodes an array into
-//! per-element candidates.
+//! Path grammar is [`super::json_path`]'s dialect (the one
+//! `FixtureIntegrationTest`'s `JsonField`/`JsonPathNonEmpty` assertions use).
+//! `select` and `where` paths go through the multi-valued
+//! [`resolve_json_path_all`], which adds recursive descent `..key` and `[*]`
+//! at any position: `select` yields every node reached (a `[*]` explodes each
+//! array among them), and a `where` clause whose path reaches several values
+//! holds when ANY value satisfies the op on its own. `sum` stays
+//! single-valued: a `sum` path that fans out is an Error.
 //!
 //! No subprocess, no scratch directory — this backend is pure, in-memory
 //! evaluation over a `serde_json::Value`, which is also why its trust tier
@@ -22,7 +26,9 @@ use crate::backend::{ReceiptAggregate, ReceiptQueryArgs, WhereClause, WhereOp};
 use crate::result::ObligationStatus;
 use crate::ReceiptSubject;
 
-use super::json_path::{resolve_json_path, validate_supported_path};
+use super::json_path::{
+    path_fans_out, resolve_json_path, resolve_json_path_all, validate_supported_path,
+};
 
 pub(crate) fn run(
     args: &ReceiptQueryArgs,
@@ -59,7 +65,7 @@ fn evaluate(args: &ReceiptQueryArgs, root: &Value) -> (ObligationStatus, Value) 
         }
     };
     for clause in &args.where_clauses {
-        if let Err(error) = validate_supported_path(&clause.path) {
+        if let Err(error) = resolve_json_path_all(&Value::Null, &clause.path) {
             return (
                 ObligationStatus::Error,
                 serde_json::json!({ "error": error, "where": clause.path }),
@@ -67,7 +73,7 @@ fn evaluate(args: &ReceiptQueryArgs, root: &Value) -> (ObligationStatus, Value) 
         }
     }
     if let ReceiptAggregate::Sum { path } = &args.aggregate {
-        if let Err(error) = validate_supported_path(path) {
+        if let Err(error) = validate_sum_path(path) {
             return (
                 ObligationStatus::Error,
                 serde_json::json!({ "error": error, "sum": path }),
@@ -138,33 +144,30 @@ fn aggregate_name(aggregate: &ReceiptAggregate) -> &'static str {
     }
 }
 
-/// `select` resolves `path` (after stripping a trailing `[*]`, if present).
-/// A trailing `[*]` requests explosion: if the resolved node is an array,
-/// candidates are its elements; if it isn't (a receipt shaped differently
-/// than expected), the resolved node itself is the sole candidate rather
-/// than erroring. Without `[*]`, the resolved node (array or not) is always
-/// the sole candidate — e.g. `$.meta.run_id` (a single string) never needs
-/// `[*]`. A path that does not resolve at all yields zero candidates,
-/// regardless of `[*]`.
+/// `sum` names exactly one amount per candidate. A path that can fan out
+/// (`..key` or `[*]`) is refused in this version: a spend cap over several
+/// values per candidate must be written explicitly, not inferred. Anything
+/// else goes through 0.1.3's single-valued validator.
+fn validate_sum_path(path: &str) -> Result<(), String> {
+    if path_fans_out(path)? {
+        return Err(format!(
+            "sum over a multi-valued path is not supported in this version: `{path}` uses `..` or \
+             `[*]`; `sum` is a spend cap and must name exactly one amount per selected candidate"
+        ));
+    }
+    validate_supported_path(path)
+}
+
+/// `select` yields every node `path` reaches ([`resolve_json_path_all`]).
+/// A `[*]` explodes each array among the nodes it applies to into its
+/// elements; a non-array node there is kept as itself rather than erroring
+/// (a receipt shaped differently than expected). Without `[*]`, each reached
+/// node (array or not) is one candidate, e.g. `$.meta.run_id` (a single
+/// string) never needs `[*]`, and `$..claims` yields each `claims` array
+/// whole. A path that reaches nothing yields zero candidates. Unparseable
+/// syntax is an `Err`, never zero candidates.
 fn select_candidates<'a>(root: &'a Value, select: &str) -> Result<Vec<&'a Value>, String> {
-    let (base_path, explode) = match select.strip_suffix("[*]") {
-        Some(base) => (base, true),
-        None => (select, false),
-    };
-    validate_supported_path(base_path)?;
-    Ok(match resolve_json_path(root, base_path) {
-        None => vec![],
-        Some(node) => {
-            if explode {
-                match node.as_array() {
-                    Some(array) => array.iter().collect(),
-                    None => vec![node],
-                }
-            } else {
-                vec![node]
-            }
-        }
-    })
+    resolve_json_path_all(root, select)
 }
 
 fn clauses_match(clauses: &[WhereClause], candidate: &Value) -> Result<bool, String> {
@@ -176,28 +179,71 @@ fn clauses_match(clauses: &[WhereClause], candidate: &Value) -> Result<bool, Str
     Ok(true)
 }
 
-/// Evaluates one clause. Each op's "positive" form (`Eq`/`In`/`Matches`/
-/// `Exists`/the four comparisons) resolves to `false` when `clause.path`
-/// does not resolve; the "negative" forms (`Ne`/`NotIn`/`Absent`) are exact
-/// logical negations of their positive counterparts, which is exactly what
-/// makes them resolve to `true` on a missing path — the fail-closed table
-/// (backend.rs's `WhereClause` doc) is a restatement of this, not a
-/// separate rule to keep in sync.
+/// Evaluates one clause against one candidate. The clause path resolves to
+/// zero or more values ([`resolve_json_path_all`]).
+///
+/// One value: the op as written (`Eq`, `In`, `Matches`, the comparisons,
+/// and their negations `Ne`/`NotIn`), unchanged from the single-valued
+/// dialect.
+///
+/// Several values: the clause holds when ANY value satisfies the op on its
+/// own. So `Ne` holds when at least one value differs and `NotIn` when at
+/// least one value is outside the list: the canonical allowlist gate counts
+/// `targets: ["allowed", "evil"]` as a violation. These are not set
+/// negations of `Eq`/`In`; both `Eq` and `Ne` can hold for one candidate.
+///
+/// No value (missing path, or a descent or `[*]` that reaches nothing): the
+/// fail-closed table (backend.rs's `WhereClause` doc), positive ops `false`
+/// and negative ops `true`. `Exists` holds when at least one value is
+/// reached and `Absent` when none is. The configured `value` is validated
+/// before any of this, so a malformed clause errors on every candidate.
 fn clause_matches(clause: &WhereClause, candidate: &Value) -> Result<bool, String> {
-    let resolved = resolve_json_path(candidate, &clause.path);
-    match clause.op {
-        WhereOp::Exists => Ok(resolved.is_some()),
-        WhereOp::Absent => Ok(resolved.is_none()),
-        WhereOp::Eq => Ok(op_eq(resolved, require_value(clause)?)),
-        WhereOp::Ne => Ok(!op_eq(resolved, require_value(clause)?)),
-        WhereOp::In => Ok(op_in(resolved, require_array_value(clause)?)),
-        WhereOp::NotIn => Ok(!op_in(resolved, require_array_value(clause)?)),
-        WhereOp::Matches => op_matches(resolved, require_str_value(clause)?),
-        WhereOp::Gt => Ok(op_cmp(resolved, require_num_value(clause)?, |a, b| a > b)),
-        WhereOp::Gte => Ok(op_cmp(resolved, require_num_value(clause)?, |a, b| a >= b)),
-        WhereOp::Lt => Ok(op_cmp(resolved, require_num_value(clause)?, |a, b| a < b)),
-        WhereOp::Lte => Ok(op_cmp(resolved, require_num_value(clause)?, |a, b| a <= b)),
+    let resolved = resolve_json_path_all(candidate, &clause.path)?;
+    let predicate: Box<dyn Fn(&Value) -> bool> = match clause.op {
+        WhereOp::Exists => return Ok(!resolved.is_empty()),
+        WhereOp::Absent => return Ok(resolved.is_empty()),
+        WhereOp::Eq => {
+            let configured = require_value(clause)?;
+            Box::new(move |v| v == configured)
+        }
+        WhereOp::Ne => {
+            let configured = require_value(clause)?;
+            Box::new(move |v| v != configured)
+        }
+        WhereOp::In => {
+            let configured = require_array_value(clause)?;
+            Box::new(move |v| configured.contains(v))
+        }
+        WhereOp::NotIn => {
+            let configured = require_array_value(clause)?;
+            Box::new(move |v| !configured.contains(v))
+        }
+        WhereOp::Matches => {
+            let pattern = require_str_value(clause)?;
+            let re = regex::Regex::new(pattern)
+                .map_err(|e| format!("invalid regex '{pattern}': {e}"))?;
+            Box::new(move |v| v.as_str().is_some_and(|s| re.is_match(s)))
+        }
+        WhereOp::Gt => numeric(require_num_value(clause)?, |a, b| a > b),
+        WhereOp::Gte => numeric(require_num_value(clause)?, |a, b| a >= b),
+        WhereOp::Lt => numeric(require_num_value(clause)?, |a, b| a < b),
+        WhereOp::Lte => numeric(require_num_value(clause)?, |a, b| a <= b),
+    };
+    if resolved.is_empty() {
+        return Ok(is_negative_op(clause.op));
     }
+    Ok(resolved.into_iter().any(predicate))
+}
+
+/// The ops that hold on a missing path (the fail-closed table).
+fn is_negative_op(op: WhereOp) -> bool {
+    matches!(op, WhereOp::Ne | WhereOp::NotIn | WhereOp::Absent)
+}
+
+/// A numeric comparison against `configured`; a non-numeric value fails
+/// closed (does not satisfy it) rather than erroring.
+fn numeric(configured: f64, cmp: fn(f64, f64) -> bool) -> Box<dyn Fn(&Value) -> bool> {
+    Box::new(move |v| v.as_f64().is_some_and(|actual| cmp(actual, configured)))
 }
 
 fn require_value(clause: &WhereClause) -> Result<&Value, String> {
@@ -237,36 +283,6 @@ fn require_num_value(clause: &WhereClause) -> Result<f64, String> {
             clause.op, clause.path
         )
     })
-}
-
-/// Deep (structural) equality — `serde_json::Value`'s own `PartialEq`
-/// already compares arrays element-wise and objects key-for-key, so this is
-/// "deep eq" for free. `None` (missing path) is never equal to anything.
-fn op_eq(resolved: Option<&Value>, configured: &Value) -> bool {
-    resolved.map(|r| r == configured).unwrap_or(false)
-}
-
-/// Membership by the same deep equality. `None` (missing path) is never a
-/// member of anything.
-fn op_in(resolved: Option<&Value>, configured: &[Value]) -> bool {
-    resolved
-        .map(|r| configured.iter().any(|item| item == r))
-        .unwrap_or(false)
-}
-
-fn op_matches(resolved: Option<&Value>, pattern: &str) -> Result<bool, String> {
-    let re = regex::Regex::new(pattern).map_err(|e| format!("invalid regex '{pattern}': {e}"))?;
-    Ok(resolved
-        .and_then(Value::as_str)
-        .map(|s| re.is_match(s))
-        .unwrap_or(false))
-}
-
-fn op_cmp(resolved: Option<&Value>, configured: f64, cmp: impl Fn(f64, f64) -> bool) -> bool {
-    resolved
-        .and_then(Value::as_f64)
-        .map(|actual| cmp(actual, configured))
-        .unwrap_or(false)
 }
 
 #[cfg(test)]
@@ -796,15 +812,25 @@ mod tests {
     // ── unsupported path syntax is an Error, never a silent pass (0.1.3) ──
 
     #[test]
-    fn select_with_recursive_descent_is_refused() {
+    fn select_with_malformed_descent_is_refused() {
         let root = receipt();
-        let err = select_candidates(&root, "$..actions[*]").unwrap_err();
-        assert!(err.contains("recursive descent"), "{err}");
+        for select in [
+            "$...actions[*]",
+            "$..",
+            "$.actions..",
+            "$..[*]",
+            "$.actions[x]",
+        ] {
+            let err = select_candidates(&root, select).unwrap_err();
+            assert!(err.contains("unsupported path syntax"), "{select}: {err}");
+        }
     }
 
     #[test]
-    fn recursive_select_with_expected_zero_errors_instead_of_passing() {
-        // The 0.1.2 fail-open: three violations present, `$..` matched nothing, gate passed.
+    fn recursive_select_with_expected_zero_counts_the_violations_instead_of_passing() {
+        // The 0.1.2 fail-open: three violations present, `$..` matched nothing,
+        // gate passed. 0.1.3 made it an Error; with descent implemented the
+        // three violations are counted and the gate fails.
         let root =
             serde_json::json!({"claims": [{"kind": "bad"}, {"kind": "bad"}, {"kind": "bad"}]});
         let args = ReceiptQueryArgs {
@@ -818,11 +844,12 @@ mod tests {
             expected: ReceiptExpectation::Zero,
         };
         let (status, detail) = evaluate(&args, &root);
-        assert_eq!(status, ObligationStatus::Error, "{detail}");
+        assert_eq!(status, ObligationStatus::Failed, "{detail}");
+        assert_eq!(detail["matched_count"], 3, "{detail}");
     }
 
     #[test]
-    fn where_path_with_wildcard_errors_instead_of_passing() {
+    fn where_path_with_wildcard_counts_the_violation_instead_of_passing() {
         let root = serde_json::json!({"claims": [{"kind": "bad"}]});
         let args = ReceiptQueryArgs {
             select: "$".into(),
@@ -835,11 +862,34 @@ mod tests {
             expected: ReceiptExpectation::Zero,
         };
         let (status, detail) = evaluate(&args, &root);
-        assert_eq!(status, ObligationStatus::Error, "{detail}");
-        assert!(
-            detail["error"].as_str().unwrap().contains("wildcard"),
-            "{detail}"
-        );
+        assert_eq!(status, ObligationStatus::Failed, "{detail}");
+        assert_eq!(detail["matched_count"], 1, "{detail}");
+    }
+
+    #[test]
+    fn where_path_with_malformed_syntax_errors_instead_of_passing() {
+        let root = serde_json::json!({"claims": [{"kind": "bad"}]});
+        for path in ["$.claims[*]..", "$...kind", "$.claims[x].kind", "$.*"] {
+            let args = ReceiptQueryArgs {
+                select: "$".into(),
+                where_clauses: vec![WhereClause {
+                    path: path.into(),
+                    op: WhereOp::NotIn,
+                    value: Some(serde_json::json!(["good"])),
+                }],
+                aggregate: ReceiptAggregate::Count,
+                expected: ReceiptExpectation::Zero,
+            };
+            let (status, detail) = evaluate(&args, &root);
+            assert_eq!(status, ObligationStatus::Error, "{path}: {detail}");
+            assert!(
+                detail["error"]
+                    .as_str()
+                    .unwrap()
+                    .contains("unsupported path syntax"),
+                "{detail}"
+            );
+        }
     }
 
     #[test]
@@ -853,7 +903,265 @@ mod tests {
             },
             expected: ReceiptExpectation::Zero,
         };
-        let (status, _) = evaluate(&args, &root);
+        let (status, detail) = evaluate(&args, &root);
         assert_eq!(status, ObligationStatus::Error);
+        assert!(
+            detail["error"]
+                .as_str()
+                .unwrap()
+                .contains("multi-valued path is not supported"),
+            "{detail}"
+        );
+    }
+
+    #[test]
+    fn sum_path_with_wildcard_errors() {
+        let root = serde_json::json!({"actions": [{"amounts": [1, 2]}]});
+        let args = ReceiptQueryArgs {
+            select: "$.actions[*]".into(),
+            where_clauses: vec![],
+            aggregate: ReceiptAggregate::Sum {
+                path: "$.amounts[*]".into(),
+            },
+            expected: ReceiptExpectation::AtMost { value: 100.0 },
+        };
+        let (status, detail) = evaluate(&args, &root);
+        assert_eq!(status, ObligationStatus::Error, "{detail}");
+        assert!(
+            detail["error"]
+                .as_str()
+                .unwrap()
+                .contains("multi-valued path is not supported"),
+            "{detail}"
+        );
+    }
+
+    // ── recursive select (D2) ────────────────────────────────────────────
+
+    fn nested_claims() -> Value {
+        json!({
+            "claims": [
+                {"id": "C1", "gate": true, "claims": [
+                    {"id": "C1a", "check": {"kind": "command"}},
+                    {"id": "C1b", "gate": true, "claims": [
+                        {"id": "C1b-i", "check": {"kind": "human"}}
+                    ]}
+                ]},
+                {"id": "C2", "check": {"kind": "rg"}}
+            ]
+        })
+    }
+
+    fn ids(candidates: &[&Value]) -> Vec<String> {
+        candidates
+            .iter()
+            .map(|c| c["id"].as_str().unwrap().to_string())
+            .collect()
+    }
+
+    #[test]
+    fn recursive_select_returns_every_claim_at_every_depth() {
+        let root = nested_claims();
+        let candidates = select_candidates(&root, "$..claims[*]").unwrap();
+        assert_eq!(ids(&candidates), ["C1", "C2", "C1a", "C1b", "C1b-i"]);
+    }
+
+    #[test]
+    fn recursive_select_reaches_claims_under_children_only_by_key() {
+        // JSONPath `..claims` follows the key name: claims nested under a
+        // `children` key are not under `claims`, and `$..children[*]`
+        // selects them.
+        let root = json!({
+            "claims": [{"id": "C1", "children": [{"id": "C1a"}, {"id": "C1b", "children": [{"id": "C1b-i"}]}]}]
+        });
+        assert_eq!(
+            ids(&select_candidates(&root, "$..claims[*]").unwrap()),
+            ["C1"]
+        );
+        assert_eq!(
+            ids(&select_candidates(&root, "$..children[*]").unwrap()),
+            ["C1a", "C1b", "C1b-i"]
+        );
+    }
+
+    #[test]
+    fn recursive_select_without_star_yields_each_matched_array() {
+        let root = nested_claims();
+        let candidates = select_candidates(&root, "$..claims").unwrap();
+        assert_eq!(candidates.len(), 3);
+        assert!(candidates.iter().all(|c| c.is_array()));
+    }
+
+    #[test]
+    fn recursive_select_star_falls_back_to_each_non_array_node() {
+        let root = json!({"a": {"k": "x"}, "b": [{"k": ["y", "z"]}]});
+        let candidates = select_candidates(&root, "$..k[*]").unwrap();
+        assert_eq!(candidates, vec![&json!("x"), &json!("y"), &json!("z")]);
+    }
+
+    #[test]
+    fn recursive_select_counts_the_nested_human_gate_claim() {
+        let root = nested_claims();
+        let query = args(
+            "$..claims[*]",
+            vec![
+                clause("$.gate", WhereOp::Ne, Some(json!(false))),
+                clause("$.check.kind", WhereOp::Eq, Some(json!("human"))),
+            ],
+            ReceiptAggregate::Count,
+            ReceiptExpectation::Zero,
+        );
+        let (status, detail) = evaluate(&query, &root);
+        assert_eq!(status, ObligationStatus::Failed, "{detail}");
+        assert_eq!(detail["selected_count"], 5, "{detail}");
+        assert_eq!(detail["matched_count"], 1, "{detail}");
+    }
+
+    // ── multi-valued where: ANY value satisfies the per-value predicate (D3) ──
+
+    fn multi(op: WhereOp, value: Option<Value>, targets: Value) -> bool {
+        clause_matches(
+            &clause("$.targets[*]", op, value),
+            &json!({ "targets": targets }),
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn multi_eq_is_any_value_equal() {
+        assert!(multi(WhereOp::Eq, Some(json!("b")), json!(["a", "b"])));
+        assert!(!multi(WhereOp::Eq, Some(json!("c")), json!(["a", "b"])));
+    }
+
+    #[test]
+    fn multi_ne_is_any_value_different_not_a_set_negation() {
+        assert!(multi(WhereOp::Ne, Some(json!("a")), json!(["a", "b"])));
+        assert!(!multi(WhereOp::Ne, Some(json!("a")), json!(["a", "a"])));
+        // Not the negation of `eq`: both hold for ["a", "b"].
+        assert!(multi(WhereOp::Eq, Some(json!("a")), json!(["a", "b"])));
+    }
+
+    #[test]
+    fn multi_in_is_any_value_member() {
+        assert!(multi(
+            WhereOp::In,
+            Some(json!(["b", "z"])),
+            json!(["a", "b"])
+        ));
+        assert!(!multi(WhereOp::In, Some(json!(["z"])), json!(["a", "b"])));
+    }
+
+    #[test]
+    fn multi_not_in_is_any_value_outside() {
+        assert!(multi(
+            WhereOp::NotIn,
+            Some(json!(["allowed"])),
+            json!(["allowed", "evil"])
+        ));
+        assert!(!multi(
+            WhereOp::NotIn,
+            Some(json!(["allowed"])),
+            json!(["allowed", "allowed"])
+        ));
+    }
+
+    #[test]
+    fn multi_matches_is_any_string_value_matching() {
+        assert!(multi(
+            WhereOp::Matches,
+            Some(json!("^ev")),
+            json!([1, "ok", "evil"])
+        ));
+        assert!(!multi(
+            WhereOp::Matches,
+            Some(json!("^ev")),
+            json!([1, "ok"])
+        ));
+    }
+
+    #[test]
+    fn multi_comparisons_are_any_value() {
+        let values = json!([1, "x", 10]);
+        assert!(multi(WhereOp::Gt, Some(json!(5)), values.clone()));
+        assert!(!multi(WhereOp::Gt, Some(json!(10)), values.clone()));
+        assert!(multi(WhereOp::Gte, Some(json!(10)), values.clone()));
+        assert!(multi(WhereOp::Lt, Some(json!(2)), values.clone()));
+        assert!(!multi(WhereOp::Lt, Some(json!(1)), values.clone()));
+        assert!(multi(WhereOp::Lte, Some(json!(1)), values));
+    }
+
+    #[test]
+    fn multi_exists_and_absent() {
+        assert!(multi(WhereOp::Exists, None, json!(["a", "b"])));
+        assert!(!multi(WhereOp::Absent, None, json!(["a", "b"])));
+        assert!(!multi(WhereOp::Exists, None, json!([])));
+        assert!(multi(WhereOp::Absent, None, json!([])));
+    }
+
+    #[test]
+    fn multi_empty_result_keeps_the_missing_path_table() {
+        // Positive ops false, negative ops true, exactly as for a missing path.
+        for (op, value, expected) in [
+            (WhereOp::Eq, json!("a"), false),
+            (WhereOp::In, json!(["a"]), false),
+            (WhereOp::Matches, json!("a"), false),
+            (WhereOp::Gt, json!(0), false),
+            (WhereOp::Gte, json!(0), false),
+            (WhereOp::Lt, json!(0), false),
+            (WhereOp::Lte, json!(0), false),
+            (WhereOp::Ne, json!("a"), true),
+            (WhereOp::NotIn, json!(["a"]), true),
+        ] {
+            assert_eq!(
+                multi(op, Some(value.clone()), json!([])),
+                expected,
+                "{op:?} over []"
+            );
+            assert_eq!(
+                clause_matches(&clause("$..nowhere", op, Some(value)), &json!({"a": 1})).unwrap(),
+                expected,
+                "{op:?} over a descent that finds nothing"
+            );
+        }
+    }
+
+    #[test]
+    fn multi_empty_result_still_validates_the_configured_value() {
+        let error = clause_matches(
+            &clause("$.targets[*]", WhereOp::NotIn, None),
+            &json!({"targets": []}),
+        )
+        .unwrap_err();
+        assert!(error.contains("requires a 'value'"), "{error}");
+        let error = clause_matches(
+            &clause("$.targets[*]", WhereOp::Matches, Some(json!("("))),
+            &json!({"targets": []}),
+        )
+        .unwrap_err();
+        assert!(error.contains("invalid regex"), "{error}");
+    }
+
+    #[test]
+    fn canonical_allowlist_gate_over_a_multi_valued_path_fails_closed() {
+        let query = args(
+            "$.actions[*]",
+            vec![clause(
+                "$.targets[*]",
+                WhereOp::NotIn,
+                Some(json!(["allowed"])),
+            )],
+            ReceiptAggregate::Count,
+            ReceiptExpectation::Zero,
+        );
+        let (status, detail) = evaluate(
+            &query,
+            &json!({"actions": [{"targets": ["allowed", "evil"]}]}),
+        );
+        assert_eq!(status, ObligationStatus::Failed, "{detail}");
+        assert_eq!(detail["matched_count"], 1, "{detail}");
+
+        let (status, detail) = evaluate(&query, &json!({"actions": [{"targets": ["allowed"]}]}));
+        assert_eq!(status, ObligationStatus::Passed, "{detail}");
+        assert_eq!(detail["matched_count"], 0, "{detail}");
     }
 }

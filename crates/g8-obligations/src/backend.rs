@@ -509,15 +509,21 @@ pub enum BuiltinAlgorithmArgs {
 pub struct ReceiptQueryArgs {
     /// Path into the parsed receipt, in the same `$.`-prefixed dot/bracket
     /// dialect [`crate::exec`]'s `FixtureIntegrationTest` assertions already
-    /// use, plus one addition: a trailing `[*]` explodes an array at that
-    /// path into one candidate per element. Without `[*]`, the resolved node
-    /// itself (array or not) is the sole candidate. A path that does not
-    /// resolve at all yields zero candidates.
+    /// use, plus recursive descent and wildcards: `..key` reaches the `key`
+    /// member at any depth (including a `key` nested inside a matched
+    /// `key`), and `[*]` at any position explodes an array into its elements
+    /// (a non-array node there is kept as itself). Every node the path
+    /// reaches is one candidate, so `$..claims[*]` selects every element of
+    /// every `claims` array at any depth, and `$.meta.run_id` selects one
+    /// string. A path that reaches nothing yields zero candidates; a path
+    /// the resolver cannot parse (`$..`, `$...`, `.*`, `[x]`, `$.a..`) is
+    /// `ObligationStatus::Error`, never zero candidates.
     pub select: String,
     /// ANDed predicates; each clause's `path` resolves against every
-    /// candidate independently. `[*]` is not meaningful here — only `select`
-    /// produces multiple candidates. Empty = every candidate matches (no
-    /// filtering).
+    /// candidate independently, in the same dialect as `select`. A path
+    /// with `..key` or `[*]` can reach several values; the clause then holds
+    /// when ANY value satisfies the op (see [`WhereClause`]). Empty = every
+    /// candidate matches (no filtering).
     #[serde(default, rename = "where")]
     pub where_clauses: Vec<WhereClause>,
     pub aggregate: ReceiptAggregate,
@@ -533,6 +539,19 @@ pub struct ReceiptQueryArgs {
 /// comparisons). Rationale: "count of actions whose target is `not_in` the
 /// allowlist must be zero" has to count a targetless action as outside the
 /// allowlist, not let it slip through unnoticed.
+///
+/// **Multi-valued paths use the ANY quantifier.** A `path` with `..key` or
+/// `[*]` can reach several values; the clause holds when ANY value
+/// satisfies the op evaluated on that value alone: `Eq`, `In`, `Matches`
+/// and the comparisons per value, `Ne` when at least one value differs,
+/// `NotIn` when at least one value is outside the list, `Exists` when at
+/// least one value is reached, `Absent` when none is. For multi-valued
+/// paths the negative ops are not set negations of the positive ones (`Eq`
+/// and `Ne` can both hold): `{"path": "$.targets[*]", "op": "not_in",
+/// "value": ["allowed"]}` counts `targets: ["allowed", "evil"]`, which is
+/// the fail-closed reading of an allowlist. A path that reaches no value
+/// follows the missing-path table above; a path that reaches one value
+/// behaves exactly as a single-valued path.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WhereClause {
     pub path: String,
@@ -574,7 +593,10 @@ pub enum WhereOp {
 pub enum ReceiptAggregate {
     /// Number of candidates that passed every `where` clause.
     Count,
-    /// Sum of `path` resolved against each passing candidate. **Loud**: a
+    /// Sum of `path` resolved against each passing candidate. `path` is
+    /// single-valued: a `path` with `..key` or `[*]` is
+    /// `ObligationStatus::Error` in this version (a spend cap names exactly
+    /// one amount per candidate). **Loud**: a
     /// missing or non-numeric value at any passing candidate is
     /// `ObligationStatus::Error`, never silently skipped — addendum: "a
     /// spend cap that silently skips unparseable amounts is a hole."
