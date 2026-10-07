@@ -212,7 +212,7 @@ Shared arg shapes:
 // 11. receipt_query, structural query over an ACTION RECEIPT (receipt mode only;
 //     the obligation must carry signal.wiring = "action_receipt"). See §receipts.
 { "backend": "receipt_query", "args": {
-    "select": "$.actions[*]",                       // [*] explodes an array into candidates
+    "select": "$.actions[*]",                       // [*] explodes an array; $..claims[*] = every depth
     "where": [ {"path":"$.kind","op":"eq","value":"publish"},
                {"path":"$.source_ref","op":"absent"} ],   // ANDed; ops: eq ne matches in
     "aggregate": {"kind":"count"},                  //   not_in exists absent gt gte lt lte
@@ -321,6 +321,17 @@ log of an agent's proposed/executed actions, the choke point moves from pre-comm
   (`ne/not_in/absent`) are satisfied, so "domain `not_in` allowlist must be zero"
   counts an action with *no* domain as violating. `sum` over a missing/non-numeric
   value on a matched candidate is a loud Error, never a silent skip.
+- Paths: `$.key.key[0]`, plus `..key` (that key at any depth, JSONPath semantics) and
+  `[*]` anywhere (array elements; a non-array stays itself). `$..claims[*]` selects every
+  element of every `claims` array at any depth; claims nested under `children` need their
+  own obligation on `$..children[*]`. Unparseable paths (`$..`, `$...`, `.*`, `[x]`,
+  `$.a..`) are an Error, never "matched nothing".
+- A `where` path that reaches several values holds when ANY value satisfies the op on its
+  own: `ne` = at least one value differs, `not_in` = at least one value outside the list,
+  `absent` = no value. Negative ops are not set negations for multi-valued paths, so
+  `{"path":"$.targets[*]","op":"not_in","value":["allowed"]}` counts
+  `targets: ["allowed","evil"]`. No value reached = the missing-path table above. `sum`
+  over a path with `..` or `[*]` is an Error in this version.
 
 ---
 

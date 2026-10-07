@@ -8,6 +8,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `receipt_query` paths support recursive descent and wildcards. `..key`
+  reaches that key at any depth, including a key nested inside a matched key
+  (JSONPath semantics), and `[*]` works at any position (array elements; a
+  non-array stays itself). `select: "$..claims[*]"` selects every element of
+  every `claims` array at any depth. Claims nested under a different key,
+  such as `children`, need their own selector (`$..children[*]`).
+- A `where` path that reaches two or more values holds when ANY value
+  satisfies the op on its own. `ne` holds when at least one value differs,
+  `not_in` when at least one value is outside the list, `exists` when at
+  least one value is reached, `absent` when none is. For multi-valued paths
+  the negative ops are not set negations of the positive ones, so the
+  allowlist gate `{"path": "$.targets[*]", "op": "not_in", "value":
+  ["allowed"]}` counts `targets: ["allowed", "evil"]`. A path that reaches no
+  value keeps the missing-path table; a path that reaches one value behaves
+  as before.
+
+### Changed
+
+- Path syntax the resolver cannot parse stays a checker `Error` in `select`
+  and `where`: `$..`, `$...`, `..` not followed by a key, `.*`, `..*`, empty
+  segments, non-numeric brackets, text after `]`. `$.*` was read as a
+  literal key `*` before and is now refused. `$[0]` and `$[*]` are accepted.
+- `sum` over a path with `..` or `[*]` is an `Error` that says multi-valued
+  sum is not supported in this version: a spend cap names exactly one amount
+  per candidate.
+
+### Possible follow-up
+
+- A `quantifier` field on `WhereClause` (ALL as well as ANY) for gates that
+  need every value of a multi-valued path to satisfy the op.
+
 ## [0.1.3] - 2026-10-07
 
 ### Fixed

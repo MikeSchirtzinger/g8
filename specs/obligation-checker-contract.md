@@ -60,6 +60,8 @@ Two new, additive-only schema elements from this pass: `FixtureTestArgs.seed_fil
 
 Post-Erratum-4 state, verified by the real-artifact end-to-end run (ignored test tier): **27 passed / 0 failed / 0 error / 0 unknown**, enforcement exit-code arithmetic consistent in both modes.
 
+**Addendum log, `receipt_query` paths (unreleased, after 0.1.3):** `select` and `where` paths gain recursive descent `..key` and `[*]` at any position; a `where` path that reaches several values holds when ANY value satisfies the op on its own; a `sum` path that fans out is an Error; unparseable syntax stays an Error. Full rules in new §12.6.
+
 ---
 
 ## 0. Non-negotiable constraint
@@ -1057,6 +1059,49 @@ zero. `crates/g8/tests/receipt_check.rs` covers acceptance criteria
 1–7 and 9 end-to-end through the real CLI binary; criterion 10 (the example
 walkthrough) is validated by running its documented commands directly
 against a real build, not by a `#[test]`.
+
+### 12.6 Recursive descent and multi-valued paths (unreleased, after 0.1.3)
+
+0.1.3 refused `..` and any `[*]` other than `select`'s trailing one as a
+checker Error, because the single-valued resolver read them as "matches
+nothing". `select` and `where` now go through a multi-valued resolver
+(`resolve_json_path_all` in `exec/json_path.rs`); `sum` and
+`FixtureIntegrationTest` keep the single-valued `resolve_json_path`.
+
+- **Grammar.** An optional `$`, then any sequence of `.key`, `..key`, `[n]`
+  and `[*]`; a path without `$` may start with a bare key. `..key` collects
+  the `key` member of the node and of every node below it, in document
+  order, including a `key` nested inside a matched `key` (JSONPath
+  semantics; `byte_diff_twice`'s masking walk is a separate, unchanged
+  implementation that stops at the first match). `[*]` yields every element
+  of an array and the node itself for a non-array (the old `select`
+  fallback, now uniform). A node reached twice is yielded once; distinct
+  nodes with equal values stay distinct.
+- **Refused, as an Error:** `$..`, `$...`, `..` not followed by a key
+  (`$..[0]`, `$..[*]`), `.*` and `..*`, empty segments (`$.`, `$.a..`),
+  unclosed or non-numeric brackets, text after `]`, `$` not followed by `.`
+  or `[`.
+- **`select`** yields every reached node as one candidate each. Example:
+  `$..claims[*]` selects every element of every array under a key named
+  `claims`, at any depth. It does not follow other keys: claims nested
+  under `children` need `$..children[*]` (a second obligation).
+- **`where`, ANY quantifier.** A clause whose path reaches several values
+  holds when ANY value satisfies the op on its own: `eq`, `in`, `matches`
+  and the four comparisons per value; `ne` = at least one value differs;
+  `not_in` = at least one value outside the list; `exists` = at least one
+  value; `absent` = no value. For multi-valued paths the negative ops are
+  therefore not set negations of the positive ones (`eq` and `ne` can both
+  hold). An empty result keeps the §12.2 missing-path table exactly
+  (positive ops false, negative ops true). A path that reaches one value
+  behaves exactly as before. Canonical allowlist gate:
+  `{"path": "$.targets[*]", "op": "not_in", "value": ["allowed"]}` counts a
+  candidate with `targets: ["allowed", "evil"]` (fail-closed) and does not
+  count `targets: ["allowed"]`.
+- **`sum`** over a path containing `..` or `[*]` is an Error that says so:
+  `sum` is a spend cap and names exactly one amount per candidate.
+
+An ALL quantifier (a `quantifier` field on `WhereClause`) is not part of
+this change.
 
 ---
 
