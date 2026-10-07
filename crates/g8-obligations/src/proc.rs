@@ -400,7 +400,10 @@ mod tests {
         let ambient = std::env::var_os("CARGO_TARGET_DIR")
             .map(PathBuf::from)
             .unwrap_or_else(|| root.join("target"));
-        assert_ne!(own, ambient, "a cargo_run fixture must not relink the binary under test");
+        assert_ne!(
+            own, ambient,
+            "a cargo_run fixture must not relink the binary under test"
+        );
         assert_eq!(own.parent(), Some(ambient.as_path()));
     }
 
