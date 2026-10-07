@@ -9,7 +9,7 @@
 //! `ByteDiffTwice`.
 
 use std::collections::BTreeMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::Instant;
 
@@ -74,6 +74,16 @@ pub(crate) fn run_tool(
 /// invokes `g8-extractor`, which invokes `ast-grep`) — clearing the whole
 /// environment would break that, which the contract's "controlled base
 /// environment" language does not ask for (it names four *specific* vars).
+/// Where a [`BinarySource::CargoRun`] build goes: a `g8-cargo-run` directory
+/// under the ambient `CARGO_TARGET_DIR` when one is set, else under the
+/// workspace's own `target/`. Never the directory the running binary lives in.
+pub(crate) fn cargo_run_target_dir(workspace_root: &Path) -> PathBuf {
+    let base = std::env::var_os("CARGO_TARGET_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| workspace_root.join("target"));
+    base.join("g8-cargo-run")
+}
+
 fn apply_controlled_base_env(cmd: &mut Command) {
     cmd.env_remove("G8_TRACE_JSON");
     cmd.env("TZ", "UTC");
@@ -141,6 +151,12 @@ pub(crate) fn run_invocation(
             }
             cmd.arg("--");
             cmd.args(&args);
+            // Build in a target dir of its own. A `cargo run` with a different
+            // feature set relinks `<target>/debug/g8`, which is the very file
+            // `current_exe` points at when `g8 check` runs from a cargo build,
+            // so every CurrentExe fixture after it spawned a deleted binary
+            // (ENOENT). Found 2026-10-07 on the repo's own gate (D7-01).
+            cmd.env("CARGO_TARGET_DIR", cargo_run_target_dir(workspace_root));
             cmd
         }
     };
@@ -374,6 +390,18 @@ mod tests {
             .expect("must run");
         assert_eq!(result.exit_code, 0);
         assert!(result.stdout.contains("init"), "stdout: {}", result.stdout);
+    }
+
+    #[test]
+    fn cargo_run_builds_in_its_own_target_dir_never_the_running_binarys() {
+        let root = workspace_root();
+        let own = cargo_run_target_dir(&root);
+        assert!(own.ends_with("g8-cargo-run"), "{own:?}");
+        let ambient = std::env::var_os("CARGO_TARGET_DIR")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| root.join("target"));
+        assert_ne!(own, ambient, "a cargo_run fixture must not relink the binary under test");
+        assert_eq!(own.parent(), Some(ambient.as_path()));
     }
 
     #[test]
