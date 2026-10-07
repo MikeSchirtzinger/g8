@@ -68,7 +68,7 @@ chrono = { version = "0.4", default-features = false, features = ["std", "serde"
 # sha2: deterministic content-derived IDs (Q4 ruling — deterministic zone).
 # nanoid: retained ONLY for g8's feature-gated `serve` token minting
 # (legitimate, opt-in randomness outside the deterministic zone).
-sha2   = "0.10"
+sha2   = "0.11"
 nanoid = "0.4"
 
 # ── Internal workspace crates (used by other workspace crates) ─────────────
