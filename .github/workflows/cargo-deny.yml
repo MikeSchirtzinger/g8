@@ -13,7 +13,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: cargo deny check
         uses: EmbarkStudios/cargo-deny-action@v2
