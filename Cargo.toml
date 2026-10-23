@@ -56,7 +56,7 @@ refinery = { version = "0.8", features = ["rusqlite"] }
 
 # ── Filesystem walking + change detection ──────────────────────────────────
 ignore = "0.4"
-notify = "6"
+notify = "8"
 
 # ── Regex (post-extraction name parsing per R2 §5) ─────────────────────────
 regex = "1"
