@@ -25,6 +25,22 @@ exit 1
 
 ## Install
 
+Prebuilt binaries for macOS (Apple Silicon and Intel), Linux (x86_64 and
+arm64) and Windows (x86_64) are attached to each
+[release](https://github.com/MikeSchirtzinger/g8/releases).
+
+```bash
+# macOS and Linux
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/MikeSchirtzinger/g8/releases/latest/download/g8-installer.sh | sh
+```
+
+```powershell
+# Windows
+powershell -ExecutionPolicy Bypass -c "irm https://github.com/MikeSchirtzinger/g8/releases/latest/download/g8-installer.ps1 | iex"
+```
+
+With a Rust toolchain:
+
 ```bash
 cargo install g8
 ```

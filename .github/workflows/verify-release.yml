@@ -1,0 +1,86 @@
+# Installs a published release through its own installer on every target's
+# native runner and runs the binary against a fresh project. dist only builds
+# the archives; this is the check that each one actually runs.
+#
+# Called by release.yml after the release is announced (dist
+# `post-announce-jobs`), and runnable by hand for any existing tag.
+name: Verify release
+
+on:
+  workflow_call:
+    inputs:
+      plan:
+        required: true
+        type: string
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to verify, e.g. v0.1.5"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  install-and-run:
+    name: ${{ matrix.target }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { target: aarch64-apple-darwin,      runner: macos-14 }
+          - { target: x86_64-apple-darwin,       runner: macos-15-intel }
+          - { target: x86_64-unknown-linux-gnu,  runner: ubuntu-24.04 }
+          - { target: aarch64-unknown-linux-gnu, runner: ubuntu-24.04-arm }
+          - { target: x86_64-pc-windows-msvc,    runner: windows-2022 }
+    env:
+      TAG: ${{ inputs.tag || fromJson(inputs.plan).announcement_tag }}
+      BASE: https://github.com/${{ github.repository }}/releases/download
+    steps:
+      - name: Install with the shell installer
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --proto '=https' --tlsv1.2 -LsSf "$BASE/$TAG/g8-installer.sh" | sh
+          echo "${CARGO_HOME:-$HOME/.cargo}/bin" >> "$GITHUB_PATH"
+
+      - name: Install with the PowerShell installer
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          irm "$env:BASE/$env:TAG/g8-installer.ps1" | iex
+          $bin = if ($env:CARGO_HOME) { "$env:CARGO_HOME\bin" } else { "$HOME\.cargo\bin" }
+          $bin | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: Version matches the tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          command -v g8
+          got="$(g8 --version)"
+          echo "$got"
+          test "$got" = "g8 ${TAG#v}"
+
+      - name: init, status and check against a fresh project
+        shell: bash
+        run: |
+          set -euo pipefail
+          proj="$RUNNER_TEMP/smoke"
+          mkdir -p "$proj" && cd "$proj"
+          git init -q
+          g8 init
+          test -f .g8/store.db
+          g8 status > /dev/null
+          g8 --output json check > check.json
+          python3 - <<'EOF'
+          import json, os
+          d = json.load(open("check.json"))
+          want = os.environ["TAG"].lstrip("v")
+          assert d["g8_version"] == want, (d["g8_version"], want)
+          assert d["exit_code"] == 0, d
+          assert d["errors"] == [], d["errors"]
+          print("check ok:", d["g8_version"])
+          EOF
