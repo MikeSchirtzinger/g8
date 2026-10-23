@@ -1250,6 +1250,128 @@
       ],
       "pinned_content_hash": "sha256:571087215c8b7568d52e9c2322032d8f2fdc97693239d4ba47dd60de18286b0c",
       "expires_policy": "stale_on_hash_mismatch"
+    },
+    {
+      "id": "ATT-OBL-P9-01-8433cd474e7b",
+      "obligation_id": "OBL-P9-01",
+      "attested_at": "2026-10-23T17:46:59Z",
+      "claim": "passed",
+      "evidence_pointer": "re-pinned after adding [profile.dist] for prebuilt release binaries (no dependency change); cargo test --workspace 556 passed, obligations self-audit passed",
+      "files": [
+        "Cargo.toml",
+        "crates/g8-conflict/Cargo.toml",
+        "crates/g8-core/Cargo.toml",
+        "crates/g8-extractor/Cargo.toml",
+        "crates/g8-obligations/Cargo.toml",
+        "crates/g8-planner/Cargo.toml",
+        "crates/g8-store/Cargo.toml",
+        "crates/g8/Cargo.toml"
+      ],
+      "pinned_content_hash": "sha256:8433cd474e7bdd467551ff31d61f9dfa71439c1f2f4ac323dfd50ebd5ee7cca2",
+      "expires_policy": "stale_on_hash_mismatch"
+    },
+    {
+      "id": "ATT-OBL-D8-01-8433cd474e7b",
+      "obligation_id": "OBL-D8-01",
+      "attested_at": "2026-10-23T17:46:59Z",
+      "claim": "passed",
+      "evidence_pointer": "re-pinned after adding [profile.dist] for prebuilt release binaries (no dependency change); cargo test --workspace 556 passed, obligations self-audit passed",
+      "files": [
+        "Cargo.toml",
+        "crates/g8-conflict/Cargo.toml",
+        "crates/g8-core/Cargo.toml",
+        "crates/g8-extractor/Cargo.toml",
+        "crates/g8-obligations/Cargo.toml",
+        "crates/g8-planner/Cargo.toml",
+        "crates/g8-store/Cargo.toml",
+        "crates/g8/Cargo.toml"
+      ],
+      "pinned_content_hash": "sha256:8433cd474e7bdd467551ff31d61f9dfa71439c1f2f4ac323dfd50ebd5ee7cca2",
+      "expires_policy": "stale_on_hash_mismatch"
+    },
+    {
+      "id": "ATT-OBL-D11-02-8433cd474e7b",
+      "obligation_id": "OBL-D11-02",
+      "attested_at": "2026-10-23T17:46:59Z",
+      "claim": "passed",
+      "evidence_pointer": "re-pinned after adding [profile.dist] for prebuilt release binaries (no dependency change); cargo test --workspace 556 passed, obligations self-audit passed",
+      "files": [
+        "Cargo.toml",
+        "crates/g8-conflict/Cargo.toml",
+        "crates/g8-core/Cargo.toml",
+        "crates/g8-extractor/Cargo.toml",
+        "crates/g8-obligations/Cargo.toml",
+        "crates/g8-planner/Cargo.toml",
+        "crates/g8-store/Cargo.toml",
+        "crates/g8/Cargo.toml"
+      ],
+      "pinned_content_hash": "sha256:8433cd474e7bdd467551ff31d61f9dfa71439c1f2f4ac323dfd50ebd5ee7cca2",
+      "expires_policy": "stale_on_hash_mismatch"
+    },
+    {
+      "id": "ATT-OBL-N4-01-0d07f5fe1205",
+      "obligation_id": "OBL-N4-01",
+      "attested_at": "2026-10-23T17:46:59Z",
+      "claim": "passed",
+      "evidence_pointer": "re-pinned after adding [profile.dist] for prebuilt release binaries (no dependency change); cargo test --workspace 556 passed, obligations self-audit passed",
+      "files": [
+        "Cargo.toml",
+        "crates/g8-conflict/Cargo.toml",
+        "crates/g8-core/Cargo.toml",
+        "crates/g8-extractor/Cargo.toml",
+        "crates/g8-obligations/Cargo.toml",
+        "crates/g8-planner/Cargo.toml",
+        "crates/g8-store/Cargo.toml",
+        "crates/g8/Cargo.toml",
+        "crates/g8/src/assets/g8-planner.md",
+        "crates/g8/src/cli.rs",
+        "crates/g8/src/cmd/attest.rs",
+        "crates/g8/src/cmd/check.rs",
+        "crates/g8/src/cmd/init.rs",
+        "crates/g8/src/cmd/link.rs",
+        "crates/g8/src/cmd/merge.rs",
+        "crates/g8/src/cmd/mod.rs",
+        "crates/g8/src/cmd/plan.rs",
+        "crates/g8/src/cmd/query.rs",
+        "crates/g8/src/cmd/ratify.rs",
+        "crates/g8/src/cmd/scan.rs",
+        "crates/g8/src/cmd/sidecar.rs",
+        "crates/g8/src/cmd/space.rs",
+        "crates/g8/src/cmd/status.rs",
+        "crates/g8/src/cmd/substrate.rs",
+        "crates/g8/src/ctx.rs",
+        "crates/g8/src/main.rs",
+        "crates/g8/src/render/json.rs",
+        "crates/g8/src/render/mod.rs",
+        "crates/g8/src/render/pretty.rs",
+        "crates/g8/src/serve/actions.rs",
+        "crates/g8/src/serve/graph.rs",
+        "crates/g8/src/serve/index.html",
+        "crates/g8/src/serve/mod.rs",
+        "crates/g8/src/serve/scene.rs",
+        "crates/g8/src/space_toml.rs"
+      ],
+      "pinned_content_hash": "sha256:0d07f5fe1205751c4000009bb3d44a687bb90278961a09b5d30702ba1f742d65",
+      "expires_policy": "stale_on_hash_mismatch"
+    },
+    {
+      "id": "ATT-OBL-N5-01-8433cd474e7b",
+      "obligation_id": "OBL-N5-01",
+      "attested_at": "2026-10-23T17:46:59Z",
+      "claim": "passed",
+      "evidence_pointer": "re-pinned after adding [profile.dist] for prebuilt release binaries (no dependency change); cargo test --workspace 556 passed, obligations self-audit passed",
+      "files": [
+        "Cargo.toml",
+        "crates/g8-conflict/Cargo.toml",
+        "crates/g8-core/Cargo.toml",
+        "crates/g8-extractor/Cargo.toml",
+        "crates/g8-obligations/Cargo.toml",
+        "crates/g8-planner/Cargo.toml",
+        "crates/g8-store/Cargo.toml",
+        "crates/g8/Cargo.toml"
+      ],
+      "pinned_content_hash": "sha256:8433cd474e7bdd467551ff31d61f9dfa71439c1f2f4ac323dfd50ebd5ee7cca2",
+      "expires_policy": "stale_on_hash_mismatch"
     }
   ]
 }
