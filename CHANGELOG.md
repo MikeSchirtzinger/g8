@@ -8,6 +8,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.5] - 2026-10-23
+
+### Added
+
+- Prebuilt binaries for macOS (Apple Silicon and Intel), Linux (x86_64 and
+  arm64) and Windows (x86_64) on each GitHub Release, with shell and
+  PowerShell installers. CI installs each one on its own platform and runs
+  `init`, `status` and `check` before the release counts as verified.
+
 ### Fixed
 
 - A file matched by `glob` that the checker cannot open is a checker `Error`
@@ -243,5 +252,5 @@ the published `g8` crate; the library crates stayed at 0.1.0.
 This is the initial public release. The `g8-plan-draft` LLM integration crate
 and native Rust attribute extraction are deferred to v0.2.
 
-[Unreleased]: https://github.com/MikeSchirtzinger/g8/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/MikeSchirtzinger/g8/compare/v0.1.5...HEAD
 [0.1.0]: https://github.com/MikeSchirtzinger/g8/releases/tag/v0.1.0
