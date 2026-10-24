@@ -3,9 +3,8 @@
 //! A dependency-light HTTP server (`tiny_http`, synchronous, no async runtime)
 //! that serves:
 //!   - `GET /`            embedded single-page dashboard
-//!   - `GET /api/health`  space name + agentviz deep-link base
+//!   - `GET /api/health`  crate version
 //!   - `GET /api/graph`   the convergence graph (nodes + edges + stats)
-//!   - `GET /api/scene`   an AgentViz scene document (`?download=1` to save)
 //!   - `GET /events`      Server-Sent Events; pushes on any `.g8/store.db` change
 //!   - `GET /api/version` monotonic change counter (SSE poll fallback)
 //!   - `POST /api/plan`               create a plan (runs the planner fit-check)
@@ -28,18 +27,14 @@
 //!   2. **Ephemeral token**: generated at startup, printed to stderr, and
 //!      required (header `X-G8-Token` or `?token=`) on every mutating
 //!      (`POST`) route. GET routes are unaffected.
-//!   3. **No wildcard CORS, ever.** The three read-only routes AgentViz needs
-//!      cross-origin (`/api/graph`, `/api/scene`, `/events`) echo back
-//!      `Access-Control-Allow-Origin` only when the request's `Origin`
-//!      exactly matches the configured `--agentviz-url`; every other route,
-//!      including all mutating ones and their `OPTIONS` preflights, gets no
-//!      CORS header at all.
+//!   3. **No CORS.** No route sends an `Access-Control-*` header, so a
+//!      browser page on any other origin cannot read the dashboard's data
+//!      or send it a mutating request.
 
 mod actions;
 mod graph;
-mod scene;
 
-use std::io::{Cursor, Read, Write};
+use std::io::{Cursor, Write};
 use std::net::IpAddr;
 use std::path::PathBuf;
 use std::sync::{Arc, Condvar, Mutex};
@@ -64,11 +59,6 @@ const TOKEN_PLACEHOLDER: &str = "__GOVERN_TOKEN__";
 /// awaited by SSE handlers via the condvar.
 struct State {
     store_path: PathBuf,
-    agentviz_url: String,
-    /// Origin (`scheme://host[:port]`, no path) derived from `agentviz_url` —
-    /// the only origin ever granted CORS access, and only to the three
-    /// read-only routes. Never a wildcard.
-    allowed_origin: String,
     /// Ephemeral per-run token gating all `POST` routes.
     token: String,
     version: Mutex<u64>,
@@ -113,8 +103,6 @@ pub fn run(ctx: &Ctx, args: &ServeArgs) -> Result<i32> {
 
     let state = Arc::new(State {
         store_path: ctx.store_path.clone(),
-        agentviz_url: args.agentviz_url.clone(),
-        allowed_origin: origin_of(&args.agentviz_url),
         token: token.clone(),
         version: Mutex::new(0),
         cond: Condvar::new(),
@@ -140,10 +128,6 @@ pub fn run(ctx: &Ctx, args: &ServeArgs) -> Result<i32> {
     let url = format!("http://{}:{}", display_host(&args.host), args.port);
     eprintln!("g8 dashboard live at {url}");
     eprintln!("  graph    {url}/api/graph");
-    eprintln!(
-        "  scene    {url}/api/scene   (AgentViz: open {}/?scene=…)",
-        args.agentviz_url
-    );
     eprintln!("  token    {token}   (required on POST routes: header `X-G8-Token` or `?token=`)");
     eprintln!("  Ctrl-C to stop.");
 
@@ -177,22 +161,14 @@ fn handle(mut request: Request, state: Arc<State>) -> Result<()> {
     let method = request.method().clone();
     let raw_url = request.url().to_string();
     let (path, query) = split_url(&raw_url);
-    let origin = header_value(&request, "Origin").map(str::to_string);
 
-    // CORS preflight. Only the three read-only AgentViz routes ever get
-    // scoped CORS headers; everything else (including every mutating route)
-    // gets a bare 204 with no Access-Control-* header, which makes browsers
-    // refuse to send the real cross-origin request. Non-browser callers
-    // (curl, the g8 CLI, other agents) don't consult CORS at all — the
-    // token is the real gate on mutations, this just stops browser-JS misuse.
+    // CORS preflight: a bare 204 with no Access-Control-* header, which makes
+    // browsers refuse to send the real cross-origin request. Non-browser
+    // callers (curl, the g8 CLI, other agents) don't consult CORS at all —
+    // the token is the real gate on mutations, this just stops browser-JS
+    // misuse.
     if method == Method::Options {
-        let resp = Response::empty(204);
-        let resp = if is_scoped_get_route(&path) {
-            cors_scoped(resp, &state, origin.as_deref())
-        } else {
-            resp
-        };
-        return request.respond(resp).map_err(Into::into);
+        return request.respond(Response::empty(204)).map_err(Into::into);
     }
 
     match (&method, path.as_str()) {
@@ -201,7 +177,6 @@ fn handle(mut request: Request, state: Arc<State>) -> Result<()> {
         (Method::Get, "/api/health") => {
             let body = serde_json::json!({
                 "version": env!("CARGO_PKG_VERSION"),
-                "agentviz_url": state.agentviz_url,
             });
             respond_json(request, 200, &body)
         }
@@ -212,28 +187,11 @@ fn handle(mut request: Request, state: Arc<State>) -> Result<()> {
         }
 
         (Method::Get, "/api/graph") => match build_graph_json(&state) {
-            Ok(v) => respond_json_scoped(request, 200, &v, &state, origin.as_deref()),
-            Err(e) => respond_error_scoped(request, 500, e, &state, origin.as_deref()),
+            Ok(v) => respond_json(request, 200, &v),
+            Err(e) => respond_error(request, 500, e),
         },
 
-        (Method::Get, "/api/scene") => match build_scene_json(&state) {
-            Ok(v) => {
-                let body = serde_json::to_string(&v).unwrap_or_default();
-                let mut resp = Response::from_string(body)
-                    .with_header(header("Content-Type", "application/json; charset=utf-8"));
-                if query_has(&query, "download") {
-                    resp = resp.with_header(header(
-                        "Content-Disposition",
-                        "attachment; filename=\"g8-scene.json\"",
-                    ));
-                }
-                let resp = cors_scoped(resp, &state, origin.as_deref());
-                request.respond(resp).map_err(Into::into)
-            }
-            Err(e) => respond_error_scoped(request, 500, e, &state, origin.as_deref()),
-        },
-
-        (Method::Get, "/events") => serve_sse(request, state, origin),
+        (Method::Get, "/events") => serve_sse(request, state),
 
         (Method::Post, "/api/plan") => {
             if let Some(resp) = check_token(&request, &query, &state) {
@@ -286,29 +244,19 @@ fn build_graph_json(state: &State) -> Result<serde_json::Value> {
     Ok(serde_json::to_value(&g)?)
 }
 
-fn build_scene_json(state: &State) -> Result<serde_json::Value> {
-    let g = graph::Graph::build(&state.store_path, g8_core::now_millis().as_i64())?;
-    Ok(scene::to_scene(&g))
-}
-
 // ── Server-Sent Events ────────────────────────────────────────────────────────
 
-fn serve_sse(request: Request, state: Arc<State>, origin: Option<String>) -> Result<()> {
+fn serve_sse(request: Request, state: Arc<State>) -> Result<()> {
     // Raw socket access (tiny_http `into_writer` is CGI-style — we frame the
     // whole HTTP response ourselves). On any write error the client has gone,
     // so we drop the writer and the thread exits.
     let mut w = request.into_writer();
-    let cors_line = match origin.as_deref() {
-        Some(o) if o == state.allowed_origin => format!("Access-Control-Allow-Origin: {o}\r\n"),
-        _ => String::new(),
-    };
     write!(
         w,
         "HTTP/1.1 200 OK\r\n\
          Content-Type: text/event-stream\r\n\
          Cache-Control: no-cache\r\n\
          Connection: close\r\n\
-         {cors_line}\
          \r\n"
     )?;
     let mut last = state.current();
@@ -374,7 +322,7 @@ fn spawn_watcher(dir: PathBuf, state: Arc<State>) -> Option<notify::RecommendedW
     Some(watcher)
 }
 
-// ── Security: host guard, token auth, origin-scoped CORS ─────────────────────
+// ── Security: host guard, token auth ─────────────────────────────────────────
 
 /// True if `host` is a loopback interface — `127.0.0.1`/`127.x.x.x`, `::1`, or
 /// the literal `localhost` alias. Anything else (`0.0.0.0`, a LAN/public IP, a
@@ -395,7 +343,7 @@ fn is_loopback_host(host: &str) -> bool {
 
 /// Generate the ephemeral per-run token gating all `POST` routes.
 ///
-/// `serve` is `g8` — outside the deterministic zone (see CLAUDE.md) — so
+/// `serve` is `g8` — outside the deterministic zone (SPEC.md D11) — so
 /// real randomness is fine here. `nanoid` costs nothing extra in the
 /// dependency tree: it's already resolved transitively via g8-core's ID
 /// generation (`g8_core::ids`), this just uses it directly for a longer,
@@ -426,8 +374,8 @@ fn token_authorized(expected: &str, header_token: Option<&str>, query: &str) -> 
 }
 
 /// Enforce the token on a mutating route. `None` means proceed; `Some(resp)`
-/// is the 403 to send back — deliberately with no CORS header (mutating
-/// routes never get one, scoped or otherwise; see module docs).
+/// is the 403 to send back (no CORS header, like every route; see module
+/// docs).
 fn check_token(request: &Request, query: &str, state: &State) -> Option<Response<Cursor<Vec<u8>>>> {
     let header_token = header_value(request, "X-G8-Token");
     if token_authorized(&state.token, header_token, query) {
@@ -439,42 +387,6 @@ fn check_token(request: &Request, query: &str, state: &State) -> Option<Response
             .with_status_code(403)
             .with_header(header("Content-Type", "application/json; charset=utf-8")),
     )
-}
-
-/// The three read-only routes AgentViz is allowed to reach cross-origin.
-/// Everything else — every mutating route above all — gets no CORS grant.
-fn is_scoped_get_route(path: &str) -> bool {
-    matches!(path, "/api/graph" | "/api/scene" | "/events")
-}
-
-/// Extract the origin (`scheme://host[:port]`, no path) from a URL. Used to
-/// turn `--agentviz-url` into the one value ever compared against a request's
-/// `Origin` header — the browser's `Origin` is always origin-only, so scoping
-/// against anything else could never match.
-fn origin_of(url: &str) -> String {
-    match url.find("://") {
-        Some(scheme_end) => {
-            let rest = &url[scheme_end + 3..];
-            let origin_len = rest.find('/').unwrap_or(rest.len());
-            url[..scheme_end + 3 + origin_len].to_string()
-        }
-        None => url.to_string(),
-    }
-}
-
-/// Attach `Access-Control-Allow-*` headers scoped to exactly
-/// `state.allowed_origin` — never a wildcard. If the request's `Origin`
-/// doesn't match, no CORS header is attached at all, so the browser's
-/// same-origin policy blocks the cross-origin read for any origin other than
-/// the one operator-configured AgentViz instance.
-fn cors_scoped<R: Read>(resp: Response<R>, state: &State, req_origin: Option<&str>) -> Response<R> {
-    match req_origin {
-        Some(o) if o == state.allowed_origin => resp
-            .with_header(header("Access-Control-Allow-Origin", o))
-            .with_header(header("Access-Control-Allow-Methods", "GET, OPTIONS"))
-            .with_header(header("Access-Control-Allow-Headers", "Content-Type")),
-        _ => resp,
-    }
 }
 
 /// Case-insensitive lookup of a request header's value.
@@ -502,28 +414,11 @@ fn respond_html(request: Request, html: &str, token: &str) -> Result<()> {
     request.respond(resp).map_err(Into::into)
 }
 
-/// JSON response with no CORS header — same-origin only. Used for everything
-/// except the three routes `respond_json_scoped` covers.
+/// JSON response with no CORS header — same-origin only.
 fn respond_json(request: Request, status: u16, body: &serde_json::Value) -> Result<()> {
     let resp = Response::from_string(serde_json::to_string(body).unwrap_or_default())
         .with_status_code(status)
         .with_header(header("Content-Type", "application/json; charset=utf-8"));
-    request.respond(resp).map_err(Into::into)
-}
-
-/// JSON response with CORS scoped to the configured AgentViz origin (never a
-/// wildcard) — only for `/api/graph` and `/api/scene`.
-fn respond_json_scoped(
-    request: Request,
-    status: u16,
-    body: &serde_json::Value,
-    state: &State,
-    origin: Option<&str>,
-) -> Result<()> {
-    let resp = Response::from_string(serde_json::to_string(body).unwrap_or_default())
-        .with_status_code(status)
-        .with_header(header("Content-Type", "application/json; charset=utf-8"));
-    let resp = cors_scoped(resp, state, origin);
     request.respond(resp).map_err(Into::into)
 }
 
@@ -532,21 +427,9 @@ fn respond_error(request: Request, status: u16, err: anyhow::Error) -> Result<()
     respond_json(request, status, &body)
 }
 
-fn respond_error_scoped(
-    request: Request,
-    status: u16,
-    err: anyhow::Error,
-    state: &State,
-    origin: Option<&str>,
-) -> Result<()> {
-    let body = serde_json::json!({ "ok": false, "error": format!("{err:#}") });
-    respond_json_scoped(request, status, &body, state, origin)
-}
-
 /// Map a handler `Result<Value>` to an HTTP response. Hard errors → 400 with a
 /// uniform `{ok:false,error}` envelope; success values pass through (they may
 /// themselves carry `ok:false` for soft refusals like a WIP-cap block).
-/// Always CORS-free — every caller of this is a mutating route.
 fn respond_result(request: Request, result: Result<serde_json::Value>) -> Result<()> {
     match result {
         Ok(v) => respond_json(request, 200, &v),
@@ -567,13 +450,6 @@ fn split_url(raw: &str) -> (String, String) {
         Some((p, q)) => (p.to_string(), q.to_string()),
         None => (raw.to_string(), String::new()),
     }
-}
-
-fn query_has(query: &str, key: &str) -> bool {
-    query.split('&').any(|kv| {
-        let name = kv.split('=').next().unwrap_or("");
-        name == key
-    })
 }
 
 /// Parse `key=value` out of a raw (un-percent-decoded) query string — fine
@@ -678,31 +554,6 @@ mod security_tests {
         assert_eq!(query_value("a=1&token=abc&b=2", "token"), Some("abc"));
         assert_eq!(query_value("", "token"), None);
         assert_eq!(query_value("a=1", "token"), None);
-    }
-
-    #[test]
-    fn origin_of_strips_path_and_keeps_scheme_host_port() {
-        assert_eq!(origin_of("http://localhost:8090"), "http://localhost:8090");
-        assert_eq!(origin_of("http://localhost:8090/"), "http://localhost:8090");
-        assert_eq!(
-            origin_of("http://localhost:8090/foo/bar?x=1"),
-            "http://localhost:8090"
-        );
-        assert_eq!(
-            origin_of("https://viz.example.com"),
-            "https://viz.example.com"
-        );
-    }
-
-    #[test]
-    fn scoped_get_routes_are_exactly_the_three_read_only_ones() {
-        assert!(is_scoped_get_route("/api/graph"));
-        assert!(is_scoped_get_route("/api/scene"));
-        assert!(is_scoped_get_route("/events"));
-        assert!(!is_scoped_get_route("/api/health"));
-        assert!(!is_scoped_get_route("/api/version"));
-        assert!(!is_scoped_get_route("/api/plan"));
-        assert!(!is_scoped_get_route("/"));
     }
 
     #[test]

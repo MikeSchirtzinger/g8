@@ -29,7 +29,6 @@ Cargo.lock.bak
 # Machine-local inventory + agent-harness state. These describe THIS checkout
 # on THIS machine (adoption status, pane sessions, scratch transcripts) and
 # say nothing about the code, so they never belong in a public history.
-.ada/
 .pane-*
 .herdr/
 .aider*

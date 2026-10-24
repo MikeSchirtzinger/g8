@@ -1,7 +1,7 @@
 //! Integration tests for the obligations self-audit wired into `g8 check`.
 //!
-//! Per `specs/obligation-checker-contract.md` §5 and Mike's ruling
-//! (2026-07-02): audit checks run even when enforcement is off; findings are
+//! Per `specs/obligation-checker-contract.md` §5 and the ruling
+//! of 2026-07-02: audit checks run even when enforcement is off; findings are
 //! always emitted in JSON; enforcement affects the EXIT CODE only.
 //!
 //! # Coverage

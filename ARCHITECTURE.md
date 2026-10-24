@@ -1551,7 +1551,6 @@ SUBCOMMANDS
       --port <N>              Bind port (default: 8799)
       --host <STR>            Bind host/interface (default: 127.0.0.1)
       --no-open               Don't open a browser on start
-      --agentviz-url <URL>    AgentViz explorer base URL for the deep-link
                               (default: http://localhost:8090)
 ```
 
@@ -1570,9 +1569,8 @@ dependency-minimalism principle) exposing:
 | Route | Method | Purpose |
 |---|---|---|
 | `/` | GET | Embedded single-page dashboard (vanilla JS + canvas, no external assets) |
-| `/api/health` | GET | `g8_version` + AgentViz deep-link base |
+| `/api/health` | GET | `g8_version` |
 | `/api/graph` | GET | Convergence graph: `{nodes, edges, stats, space}` |
-| `/api/scene` | GET | AgentViz `graph_explorer` scene (`?download=1` to save) |
 | `/events` | GET | Server-Sent Events; emits on any `.g8/store.db` change |
 | `/api/version` | GET | Monotonic change counter (SSE poll fallback) |
 | `/api/plan` | POST | Create a plan (runs the planner fit-check) |

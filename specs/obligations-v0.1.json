@@ -2605,7 +2605,7 @@
         "wiring": "compiled_intent_extension",
         "advisory": false
       },
-      "known_live_violation": "As of this compile, this obligation's convergence_test FAILS against the real repo: crates/g8/src/cli.rs:81 (Serve(ServeArgs)), main.rs:96 (Command::Serve => serve::run(...)), and ARCHITECTURE.md 9.2 (L1571-1591) fully specify an already-implemented `g8 serve` web dashboard (routes table, SSE, tiny_http), despite ARCHITECTURE.md L1564 itself calling it 'a post-v0.1 addition' and SPEC.md's D7 locked subcommand list (L255-258) and N5 non-goal (L87) both omitting/forbidding it. This is a real, live SPEC/ARCHITECTURE-vs-code drift, found independently this session (not by V1 or V2, though V2's T1 aside on tiny_http pointed at it) -- see OQ-08. Only Mike can decide whether to update the binding docs to formally admit `serve` into v0.1 scope, or gate/revert the code."
+      "known_live_violation": "As of this compile, this obligation's convergence_test FAILS against the real repo: crates/g8/src/cli.rs:81 (Serve(ServeArgs)), main.rs:96 (Command::Serve => serve::run(...)), and ARCHITECTURE.md 9.2 (L1571-1591) fully specify an already-implemented `g8 serve` web dashboard (routes table, SSE, tiny_http), despite ARCHITECTURE.md L1564 itself calling it 'a post-v0.1 addition' and SPEC.md's D7 locked subcommand list (L255-258) and N5 non-goal (L87) both omitting/forbidding it. This is a real, live SPEC/ARCHITECTURE-vs-code drift, found independently this session (not by V1 or V2, though V2's T1 aside on tiny_http pointed at it) -- see OQ-08. Only the maintainer can decide whether to update the binding docs to formally admit `serve` into v0.1 scope, or gate/revert the code."
     },
     {
       "id": "OBL-N6-01",

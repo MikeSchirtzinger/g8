@@ -154,7 +154,7 @@ Shared arg shapes:
 // 1. rust_enum_shape, pin a Rust enum's variant SET + rename_all.
 //    expected_variants are WIRE-FORMAT names (post rename_all), order-independent.
 { "backend": "rust_enum_shape", "args": {
-    "file": "crates/ag-ui-core/src/event.rs", "enum_name": "EventType",
+    "file": "crates/protocol/src/event.rs", "enum_name": "EventType",
     "expected_variants": ["TEXT_MESSAGE_START", "RUN_STARTED", "..."],
     "expected_serde_rename_all": "SCREAMING_SNAKE_CASE" } }   // null if the enum has none
 
@@ -235,7 +235,7 @@ Full `fixture_integration_test` assertion kinds: `file_exists`, `file_hash_uncha
 
 ## Worked example, giving one requirement real teeth
 
-**Requirement:** "The `EventType` enum must always be exactly the AG-UI spec's event
+**Requirement:** "The `EventType` enum must always be exactly the protocol spec's event
 set, serialized as `SCREAMING_SNAKE_CASE`." An agent doing a spec catch-up could add,
 drop, or misname a variant across a big diff, a textual grep wouldn't reliably catch it.
 
@@ -247,9 +247,9 @@ add/remove/rename, or a `rename_all` change, fails `g8 check` with the exact enu
 named:
 
 ```json
-{ "id": "AGUI-EVENTTYPE-SHAPE-01",
+{ "id": "PROTO-EVENTTYPE-SHAPE-01",
   "checker": { "mode": "typed", "checks": [ { "backend": "rust_enum_shape", "args": {
-    "file": "crates/ag-ui-core/src/event.rs", "enum_name": "EventType",
+    "file": "crates/protocol/src/event.rs", "enum_name": "EventType",
     "expected_variants": [ "TEXT_MESSAGE_START", "...all 38..." ],
     "expected_serde_rename_all": "SCREAMING_SNAKE_CASE" } } ] },
   "signal": { "gate": "spec_conformance", "advisory": false } }

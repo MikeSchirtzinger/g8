@@ -858,7 +858,7 @@ fn test_watch_returns_handle() {
 // ── stores written by govern 0.1.0 ───────────────────────────────────────────
 
 /// Checksum refinery recorded for V1 in a store initialised by govern 0.1.0
-/// (`refinery_schema_history` of steward's `.govern/store.db`, 2026-08-21).
+/// (`refinery_schema_history` of a real project's `.govern/store.db`, 2026-08-21).
 /// V1__init.sql must stay byte-identical to keep this value. Any schema change
 /// goes in a new migration; editing V1 locks every store from that era out.
 const GOVERN_0_1_0_V1_CHECKSUM: u64 = 8761469828895239941;

@@ -1,5 +1,5 @@
 {
-  "g8_version": "0.1.0",
+  "g8_version": "0.1.5",
   "spec_path": "specs/obligations-v0.1.json",
-  "spec_sha256": "sha256:84d27223bdf2ccda34b944bedba2009db827c6fda3d1563a94362f8bff510bfe"
+  "spec_sha256": "sha256:54d2609d1b22354573ebb3d240ae3b210df7f44eee09e456d12113447d0731c6"
 }

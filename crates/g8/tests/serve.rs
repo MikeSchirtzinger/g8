@@ -19,10 +19,8 @@
 //!
 //! # What this does NOT cover (honesty per the task brief)
 //!
-//! - CORS header scoping end-to-end (would need to send a real `Origin`
-//!   header and inspect `Access-Control-Allow-Origin` on the response; the
-//!   *decision logic* — `origin_of`, `cors_scoped`'s match arm — is covered
-//!   by unit tests in `serve/mod.rs` instead, since it's pure).
+//! - That no route sends an `Access-Control-*` header (no route has code
+//!   that adds one; not asserted against a live response here).
 //! - The `/events` SSE stream.
 //! - The `?token=` query-param path for auth (header path is covered here
 //!   end-to-end; the query-param path is covered by a unit test on

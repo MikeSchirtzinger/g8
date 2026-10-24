@@ -6,8 +6,8 @@
 //!
 //! Exit codes: 0 = clean or enforcement disabled, 1 = errors, 2 = internal failure.
 //!
-//! # Obligations self-audit (obligation-checker-contract.md §5, Mike's
-//! ruling 2026-07-02)
+//! # Obligations self-audit (obligation-checker-contract.md §5, ruling
+//! 2026-07-02)
 //!
 //! `g8 check` ALWAYS loads and runs the 27-obligation self-audit artifact
 //! at `<project_root>/specs/obligations-v0.1.json`, regardless of

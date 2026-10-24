@@ -303,7 +303,7 @@ pub(crate) fn variant_name_from_segment(seg: &str) -> Option<String> {
         // `//`, `///` (doc), `//!` (inner doc), `////`. Previously only
         // `///` was skipped, so the first variant after a `// ==== section
         // ==== ` divider comment was silently dropped: confirmed live
-        // against ag-ui-core's `EventType`, whose ActivitySnapshot /
+        // against a real protocol `EventType` enum, whose ActivitySnapshot /
         // ReasoningStart / CheckpointCreated (each the first variant under
         // such a divider) went missing. A comment with no trailing newline
         // is the whole remaining segment — no identifier follows, so None.
@@ -416,7 +416,7 @@ mod tests {
 
     #[test]
     fn variant_name_skips_a_section_divider_line_comment() {
-        // Real bug (found dogfooding against ag-ui-core's EventType): the
+        // Real bug (found against a real protocol EventType enum): the
         // first variant after a `// ==== ... ====` divider was dropped
         // because only `///` doc comments were skipped, not plain `//`.
         assert_eq!(

@@ -448,12 +448,12 @@ mod tests {
         let dir = tempfile::tempdir().expect("tempdir");
         std::fs::write(
             dir.path().join("config.toml"),
-            "[govern]\nversion = \"0.1.0\"\nproject_name = \"steward\"\nspace_id = \"abc\"\n\n[extractor]\n\n[ui]\n",
+            "[govern]\nversion = \"0.1.0\"\nproject_name = \"demo\"\nspace_id = \"abc\"\n\n[extractor]\n\n[ui]\n",
         )
         .expect("write");
         let config = load_config(dir.path()).expect("legacy config parses");
         assert_eq!(config.g8.space_id.as_deref(), Some("abc"));
-        assert_eq!(config.g8.project_name.as_deref(), Some("steward"));
+        assert_eq!(config.g8.project_name.as_deref(), Some("demo"));
     }
 
     #[test]

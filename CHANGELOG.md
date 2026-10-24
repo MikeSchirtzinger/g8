@@ -17,6 +17,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   PowerShell installers. CI installs each one on its own platform and runs
   `init`, `status` and `check` before the release counts as verified.
 
+### Removed
+
+- `g8 serve` no longer has the scene export (`GET /api/scene`), the
+  viewer URL flag, or the dashboard buttons that used them. The viewer
+  they targeted is not publicly available. With them gone, no route sends a
+  CORS header: the dashboard's data is same-origin only.
+
 ### Fixed
 
 - A file matched by `glob` that the checker cannot open is a checker `Error`
@@ -170,16 +177,16 @@ the published `g8` crate; the library crates stayed at 0.1.0.
   space (synchronous `tiny_http`, no async runtime; isolated to `g8`).
   Renders plans (colored by status), capabilities, intents, decisions, and the
   substrates that group them as an interactive force-directed graph. Endpoints:
-  `GET /` (embedded SPA), `/api/graph`, `/api/scene` (AgentViz scene export),
+  `GET /` (embedded SPA), `/api/graph`, `/api/scene` (scene export),
   `/events` (Server-Sent Events; pushes on any `.g8/store.db` change via a
   `notify` file-watch), `/api/version`, and `POST` action routes
   (`/api/plan`, `/api/plan/<id>/<action>`, `/api/substrate`) that mutate the
   store through the typed `g8-store` API (lifecycle state machine enforced).
   Live shared state: a CLI edit and a dashboard click both reflect in every open
   tab within a frame.
-- **AgentViz integration**, `GET /api/scene` emits a valid AgentViz scene
-  (`graph_explorer`); the dashboard's "Open in AgentViz" button deep-links to
-  the explorer's `g8-live` preset, which pulls the live scene over HTTP.
+- **Scene export**, `GET /api/scene` emits the convergence graph as a
+  scene document for an external 3D graph viewer, and the dashboard links to
+  that viewer.
 - **Action receipts, `g8 check --receipt <path>`**, a second choke
   point alongside `check`'s existing pre-commit gate, this one **pre-act**:
   checks a *proposed or executed agent action receipt* (any JSON document)

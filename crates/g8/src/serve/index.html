@@ -132,8 +132,6 @@ svg.ls{overflow:visible}
       <div id="live-dot" title="connecting…"></div>
     </div>
     <div id="topbar-right">
-      <button id="btn-download">Download scene</button>
-      <button id="btn-agentviz">Open in AgentViz</button>
     </div>
   </div>
   <div id="body">
@@ -234,7 +232,6 @@ const S = {
   graphData: null,       // last fetched graph
   positions: {},         // id → {x,y,vx,vy,pinned}
   version: -1,
-  agentVizUrl: 'http://localhost:8090',
   selectedId: null,
   hoverId: null,
   visibleKinds: new Set(['plan','capability','intent','decision','substrate','project']),
@@ -799,7 +796,6 @@ async function fetchHealth() {
     const d = await r.json();
     const sn = document.getElementById('space-name');
     sn.textContent = d.space?.name || '';
-    if (d.agentviz_url) S.agentVizUrl = d.agentviz_url;
   } catch {}
 }
 
@@ -911,18 +907,6 @@ function toggleColl(header) {
   body.classList.toggle('open');
   arrow.classList.toggle('open');
 }
-
-// ─── Toolbar buttons ─────────────────────────────────────────────────────────
-document.getElementById('btn-download').onclick = () => {
-  window.location = '/api/scene?download=1';
-};
-document.getElementById('btn-agentviz').onclick = () => {
-  // The explorer loads our live scene through the `g8-live` preset, whose
-  // dataset URL points back at this server's /api/scene (see agentviz
-  // presets/g8-live.json). The bare ?scene= URL param is ignored at startup.
-  const url = S.agentVizUrl + '/?preset=g8-live';
-  window.open(url, '_blank');
-};
 
 // ─── Init ────────────────────────────────────────────────────────────────────
 async function init() {

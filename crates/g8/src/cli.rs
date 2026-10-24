@@ -112,7 +112,7 @@ pub struct AttestArgs {
 // Gated behind the `serve` feature end-to-end (this struct, the `Command`
 // variant above, `mod serve` + its dispatch arm in main.rs). See
 // crates/g8/src/serve/mod.rs for the hardening this args struct exists
-// to configure (host guard, token auth, origin-scoped CORS).
+// to configure (host guard, token auth, no CORS).
 
 /// Serve the live convergence-space dashboard over HTTP.
 #[cfg(feature = "serve")]
@@ -129,10 +129,6 @@ pub struct ServeArgs {
     /// Don't open the dashboard in a browser on start
     #[arg(long)]
     pub no_open: bool,
-
-    /// Base URL of a running AgentViz explorer for the "Open in AgentViz" deep-link
-    #[arg(long, value_name = "URL", default_value = "http://localhost:8090")]
-    pub agentviz_url: String,
 
     /// Bind a non-loopback host (0.0.0.0, a LAN IP, ...) despite the risk.
     ///
