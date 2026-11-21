@@ -440,7 +440,7 @@ dependencies = [
 
 [[package]]
 name = "g8"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "anyhow",
  "assert_cmd",
@@ -452,6 +452,7 @@ dependencies = [
  "g8-obligations",
  "g8-planner",
  "g8-store",
+ "globset",
  "libc",
  "nanoid",
  "notify",
@@ -468,7 +469,7 @@ dependencies = [
 
 [[package]]
 name = "g8-conflict"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "g8-core",
  "g8-store",
@@ -480,7 +481,7 @@ dependencies = [
 
 [[package]]
 name = "g8-core"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "chrono",
  "serde",
@@ -492,7 +493,7 @@ dependencies = [
 
 [[package]]
 name = "g8-extractor"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "g8-core",
  "ignore",
@@ -507,7 +508,7 @@ dependencies = [
 
 [[package]]
 name = "g8-obligations"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "g8-core",
  "g8-store",
@@ -525,7 +526,7 @@ dependencies = [
 
 [[package]]
 name = "g8-planner"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "g8-core",
  "g8-store",
@@ -537,7 +538,7 @@ dependencies = [
 
 [[package]]
 name = "g8-store"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "chrono",
  "g8-core",

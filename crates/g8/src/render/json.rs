@@ -145,6 +145,19 @@ pub fn render_plan_detail(plan: &Plan) {
 //    specs/obligation-checker-contract.md §5 with the `obligations` self-
 //    audit array) ────────────────────────────────────────────────────────────
 
+#[derive(Clone, Copy, serde::Serialize)]
+pub struct ObligationSelection<'a> {
+    pub patterns: &'a [String],
+    pub selected: usize,
+    pub not_selected: usize,
+}
+
+pub struct CheckObligations<'a> {
+    pub results: &'a [ObligationResult],
+    pub note: Option<&'a str>,
+    pub selection: ObligationSelection<'a>,
+}
+
 /// Emit the stable `g8 check --json` contract to stdout (always, even on
 /// success).
 ///
@@ -177,8 +190,7 @@ pub fn render_check(
     errors: &[PairingError],
     exit_code: i32,
     enforcement_disabled: bool,
-    obligations: &[ObligationResult],
-    obligations_note: Option<&str>,
+    obligations: CheckObligations<'_>,
     enforcement_failures: &[EnforcementFailure],
     receipt: Option<&ReceiptInfo>,
 ) {
@@ -203,7 +215,7 @@ pub fn render_check(
     if let Some(obj) = value.as_object_mut() {
         obj.insert(
             "obligations".to_string(),
-            serde_json::to_value(obligations).expect("obligations serializable"),
+            serde_json::to_value(obligations.results).expect("obligations serializable"),
         );
         let failures = enforcement_failures
             .iter()
@@ -224,9 +236,13 @@ pub fn render_check(
             })
             .collect();
         obj.insert("enforcement_failures".to_string(), Value::Array(failures));
-        if let Some(note) = obligations_note {
+        if let Some(note) = obligations.note {
             obj.insert("obligations_note".to_string(), serde_json::json!(note));
         }
+        obj.insert(
+            "obligation_selection".to_string(),
+            serde_json::json!(obligations.selection),
+        );
         if let Some(receipt) = receipt {
             obj.insert(
                 "receipt".to_string(),

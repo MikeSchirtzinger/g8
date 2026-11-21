@@ -9,29 +9,25 @@
 //! # Obligations self-audit (obligation-checker-contract.md §5, ruling
 //! 2026-07-02)
 //!
-//! `g8 check` ALWAYS loads and runs the 27-obligation self-audit artifact
-//! at `<project_root>/specs/obligations-v0.1.json`, regardless of
-//! enforcement — audit checks run even when enforcement is off; findings
-//! are always emitted in JSON; enforcement affects the EXIT CODE only. This
-//! artifact only exists in g8's own repository today (the 27 obligations
-//! are hardcoded constraints on g8's own crates, e.g. "no `surrealdb`
-//! dependency"); every other `g8`-adopting project simply has no such
-//! file, which is NOT an error — see [`load_and_run_obligations`].
+//! `g8 check` loads the project's obligations artifact and runs the selected
+//! checks even when enforcement is off. Findings are always emitted in JSON.
 
 use std::path::Path;
 
 use anyhow::{Context, Result};
 
 use g8_obligations::{
-    load_artifact, load_receipt_subject, run_obligations, ObligationResult, ObligationStatus,
-    ReceiptSubject, TrustLevel, ACTION_RECEIPT_WIRING, STALE_ATTESTATION_CLASSIFICATION,
+    load_artifact, load_receipt_subject, run_obligations, ObligationArtifact, ObligationResult,
+    ObligationStatus, ReceiptSubject, TrustLevel, ACTION_RECEIPT_WIRING,
+    STALE_ATTESTATION_CLASSIFICATION,
 };
 use g8_store::StoreConnection;
 
 use crate::cli::{CheckArgs, OutputMode};
 use crate::ctx::{require_init, require_space, Ctx};
 use crate::render::json::{
-    EnforcementClassification as Classification, EnforcementFailure, ReceiptInfo,
+    CheckObligations, EnforcementClassification as Classification, EnforcementFailure,
+    ObligationSelection, ReceiptInfo,
 };
 use crate::render::{json as json_render, pretty};
 
@@ -42,6 +38,35 @@ use super::ratify::{
 
 pub fn run(ctx: &Ctx, args: &CheckArgs) -> Result<i32> {
     require_init(ctx)?;
+    let project_root = project_root(ctx)?;
+    let ratification = inspect_ratification(&project_root);
+    let enforcement_on = args.enforce || ctx.enforcement_on();
+    let prepared = match prepare_obligations(&project_root, args) {
+        Ok(prepared) => prepared,
+        Err(error) => {
+            let selection = ObligationSelection {
+                patterns: &args.only,
+                selected: 0,
+                not_selected: error.eligible,
+            };
+            eprintln!("g8 check: {}", error.detail);
+            print_selection(selection, enforcement_on);
+            let obligations = ObligationsOutcome::with_note(error.detail);
+            let failures = classify_enforcement_failures(&[], &obligations, &ratification);
+            pretty::render_enforcement_failures(&failures, ctx.color);
+            json_render::render_check(
+                &[],
+                2,
+                !enforcement_on,
+                obligations.report(selection),
+                &failures,
+                None,
+            );
+            return Ok(2);
+        }
+    };
+    let selection = prepared.selection;
+    print_selection(selection, enforcement_on);
 
     // `--receipt <path>` is an entirely different choke point (contract
     // addendum, o-g8-receipts-20260721 §1/§3): pre-act, not pre-commit.
@@ -50,7 +75,7 @@ pub fn run(ctx: &Ctx, args: &CheckArgs) -> Result<i32> {
     // obligations outright — routed here, before the store is even opened,
     // so it never pays for what it doesn't need ("speed matters pre-act").
     if let Some(receipt_path) = args.receipt.as_ref() {
-        return run_receipt_mode(ctx, args, receipt_path);
+        return run_receipt_mode(ctx, receipt_path, prepared, &ratification, enforcement_on);
     }
 
     let store = match ctx.open_store() {
@@ -64,16 +89,15 @@ pub fn run(ctx: &Ctx, args: &CheckArgs) -> Result<i32> {
             // migrations") and hid the cause a user needs to act on.
             let detail = format!("internal error: {e:#}");
             eprintln!("g8 check: {detail}");
-            json_render::render_check(&[], 2, false, &[], Some(&detail), &[], None);
+            let obligations = ObligationsOutcome::with_note(detail);
+            json_render::render_check(&[], 2, false, obligations.report(selection), &[], None);
             return Ok(2);
         }
     };
 
     // ── Obligations self-audit — ALWAYS runs, before the enforcement branch
     // even considers early-returning.
-    let project_root = project_root(ctx)?;
-    let obligations = load_and_run_obligations(&project_root, None);
-    let ratification = inspect_ratification(&project_root);
+    let obligations = prepared.run(&project_root, None);
 
     // Resolve optional project filter by name.
     let project_filter = if let Some(name) = args.project.as_ref() {
@@ -95,15 +119,13 @@ pub fn run(ctx: &Ctx, args: &CheckArgs) -> Result<i32> {
     // the process exit status is relaxed while enforcement is disabled.
     // `--enforce` is an invocation-local override for CI and clean-checkout
     // probes; it deliberately does not rewrite `.g8/config.toml`.
-    let enforcement_on = args.enforce || ctx.enforcement_on();
     let enforcement_failures = classify_enforcement_failures(&errors, &obligations, &ratification);
     if !enforcement_on {
         json_render::render_check(
             &errors,
             0,
             true,
-            &obligations.results,
-            obligations.note.as_deref(),
+            obligations.report(selection),
             &enforcement_failures,
             None,
         );
@@ -130,8 +152,7 @@ pub fn run(ctx: &Ctx, args: &CheckArgs) -> Result<i32> {
         &errors,
         exit_code,
         false,
-        &obligations.results,
-        obligations.note.as_deref(),
+        obligations.report(selection),
         &enforcement_failures,
         None,
     );
@@ -268,71 +289,173 @@ struct ObligationsOutcome {
 }
 
 impl ObligationsOutcome {
+    fn with_note(note: String) -> Self {
+        Self {
+            results: vec![],
+            note: Some(note),
+            advisory: Default::default(),
+        }
+    }
+
+    fn report<'a>(&'a self, selection: ObligationSelection<'a>) -> CheckObligations<'a> {
+        CheckObligations {
+            results: &self.results,
+            note: self.note.as_deref(),
+            selection,
+        }
+    }
+
     fn is_gate(&self, id: &str) -> bool {
         !self.advisory.get(id).copied().unwrap_or(false)
     }
 }
 
-/// Loads `specs/obligations-v0.1.json` (if present) and runs it.
-///
-/// `receipt` selects the choke point exactly as `g8_obligations::run_obligations`
-/// documents: `None` runs repo-wired obligations (unchanged pre-addendum
-/// behavior — the only caller in repo mode passes `None`); `Some(subject)`
-/// runs only `action_receipt`-wired obligations, against `subject`.
-fn load_and_run_obligations(
-    project_root: &Path,
-    receipt: Option<&ReceiptSubject>,
-) -> ObligationsOutcome {
-    let path = project_root.join(OBLIGATIONS_ARTIFACT_RELATIVE);
+struct PreparedObligations<'a> {
+    artifact: Result<ObligationArtifact, String>,
+    selection: ObligationSelection<'a>,
+}
 
-    // Absent artifact: the normal case for every g8-adopting project
-    // except g8's own repository. The note deliberately names the RELATIVE
-    // path only — the artifact's own determinism rule is "all paths
-    // repo-relative", and an absolute path here is what smuggled scratch-dir
-    // noise into OBL-D11-04's byte-diff (contract §2.6).
-    if !path.exists() {
-        return ObligationsOutcome {
-            results: vec![],
-            note: Some(format!(
-                "no obligations artifact at {OBLIGATIONS_ARTIFACT_RELATIVE} \
-                 (relative to the project root); self-audit skipped"
-            )),
-            advisory: Default::default(),
+impl PreparedObligations<'_> {
+    fn run(self, project_root: &Path, receipt: Option<&ReceiptSubject>) -> ObligationsOutcome {
+        let artifact = match self.artifact {
+            Ok(artifact) => artifact,
+            Err(note) => return ObligationsOutcome::with_note(note),
         };
-    }
 
-    let artifact = match load_artifact(&path) {
-        Ok(a) => a,
-        Err(e) => {
-            return ObligationsOutcome {
-                results: vec![],
-                note: Some(format!(
-                    "obligations artifact not usable at {OBLIGATIONS_ARTIFACT_RELATIVE}: {e}"
-                )),
-                advisory: Default::default(),
-            };
+        let advisory = artifact
+            .obligations
+            .iter()
+            .map(|obligation| {
+                (
+                    obligation.id.clone(),
+                    obligation
+                        .signal
+                        .as_ref()
+                        .is_some_and(|signal| signal.advisory),
+                )
+            })
+            .collect();
+        let results = run_obligations(&artifact, project_root, receipt);
+        ObligationsOutcome {
+            results,
+            note: None,
+            advisory,
+        }
+    }
+}
+
+struct SelectionError {
+    detail: String,
+    eligible: usize,
+}
+
+fn prepare_obligations<'a>(
+    project_root: &Path,
+    args: &'a CheckArgs,
+) -> Result<PreparedObligations<'a>, SelectionError> {
+    let path = project_root.join(OBLIGATIONS_ARTIFACT_RELATIVE);
+    let mut selection = ObligationSelection {
+        patterns: &args.only,
+        selected: 0,
+        not_selected: 0,
+    };
+    let artifact = if path.exists() {
+        load_artifact(&path).map_err(|error| {
+            format!("obligations artifact not usable at {OBLIGATIONS_ARTIFACT_RELATIVE}: {error}")
+        })
+    } else {
+        Err(format!(
+            "no obligations artifact at {OBLIGATIONS_ARTIFACT_RELATIVE} (relative to the project root); self-audit skipped"
+        ))
+    };
+    let mut artifact = match artifact {
+        Ok(artifact) => artifact,
+        Err(note) => {
+            if let Some(pattern) = args.only.first() {
+                return Err(SelectionError {
+                    detail: format!("cannot match --only pattern {pattern:?}: {note}"),
+                    eligible: 0,
+                });
+            }
+            return Ok(PreparedObligations {
+                artifact: Err(note),
+                selection,
+            });
         }
     };
 
-    let advisory = artifact
-        .obligations
-        .iter()
-        .map(|obligation| {
-            (
-                obligation.id.clone(),
-                obligation
-                    .signal
-                    .as_ref()
-                    .map(|signal| signal.advisory)
-                    .unwrap_or(false),
-            )
-        })
-        .collect();
-    let results = run_obligations(&artifact, project_root, receipt);
-    ObligationsOutcome {
-        results,
-        note: None,
-        advisory,
+    if args.receipt.is_some() {
+        artifact.obligations.retain(|obligation| {
+            obligation
+                .signal
+                .as_ref()
+                .is_some_and(|signal| signal.wiring == ACTION_RECEIPT_WIRING)
+        });
+    }
+
+    let eligible = artifact.obligations.len();
+    if !args.only.is_empty() {
+        let mut selected = vec![false; eligible];
+        for pattern in &args.only {
+            let matcher = match globset::GlobBuilder::new(pattern)
+                .backslash_escape(true)
+                .build()
+            {
+                Ok(glob) => Some(glob.compile_matcher()),
+                Err(_)
+                    if artifact
+                        .obligations
+                        .iter()
+                        .any(|obligation| &obligation.id == pattern) =>
+                {
+                    None
+                }
+                Err(error) => {
+                    return Err(SelectionError {
+                        detail: format!("invalid --only pattern {pattern:?}: {error}"),
+                        eligible,
+                    })
+                }
+            };
+            let mut matched = false;
+            for (obligation, selected) in artifact.obligations.iter().zip(&mut selected) {
+                if pattern == &obligation.id
+                    || matcher.as_ref().is_some_and(|m| m.is_match(&obligation.id))
+                {
+                    *selected = true;
+                    matched = true;
+                }
+            }
+            if !matched {
+                return Err(SelectionError {
+                    detail: format!("--only pattern {pattern:?} matched no obligations"),
+                    eligible,
+                });
+            }
+        }
+        artifact.obligations = artifact
+            .obligations
+            .into_iter()
+            .zip(selected)
+            .filter_map(|(obligation, selected)| selected.then_some(obligation))
+            .collect();
+    }
+
+    selection.selected = artifact.obligations.len();
+    selection.not_selected = eligible - selection.selected;
+    Ok(PreparedObligations {
+        artifact: Ok(artifact),
+        selection,
+    })
+}
+
+fn print_selection(selection: ObligationSelection<'_>, enforcement_on: bool) {
+    eprintln!(
+        "g8 check: {} obligation(s) selected, {} not selected",
+        selection.selected, selection.not_selected
+    );
+    if enforcement_on && selection.not_selected > 0 {
+        eprintln!("g8 check: partial run (obligations excluded by --only)");
     }
 }
 
@@ -349,10 +472,14 @@ fn load_and_run_obligations(
 /// repo-mode Verified/Asserted floor. Ratification is still enforced either
 /// way — an unratified/edited spec fails the receipt gate too, so an agent
 /// cannot weaken its own leash by editing its own obligations.
-fn run_receipt_mode(ctx: &Ctx, args: &CheckArgs, receipt_path: &Path) -> Result<i32> {
-    let project_root = project_root(ctx)?;
-    let ratification = inspect_ratification(&project_root);
-    let enforcement_on = args.enforce || ctx.enforcement_on();
+fn run_receipt_mode(
+    ctx: &Ctx,
+    receipt_path: &Path,
+    prepared: PreparedObligations<'_>,
+    ratification: &RatificationStatus,
+    enforcement_on: bool,
+) -> Result<i32> {
+    let selection = prepared.selection;
 
     // Malformed/missing receipt → `invalid_receipt`, never a silent pass and
     // never exit 2 (addendum §3: "bad input is a refusal, not a crash").
@@ -362,7 +489,7 @@ fn run_receipt_mode(ctx: &Ctx, args: &CheckArgs, receipt_path: &Path) -> Result<
     let (obligations, receipt_info, invalid_receipt_detail) =
         match load_receipt_subject(receipt_path) {
             Ok(subject) => {
-                let outcome = load_and_run_obligations(&project_root, Some(&subject));
+                let outcome = prepared.run(&ctx.project_root, Some(&subject));
                 let info = ReceiptInfo {
                     path: subject.display_path.clone(),
                     sha256: Some(subject.sha256.clone()),
@@ -370,11 +497,7 @@ fn run_receipt_mode(ctx: &Ctx, args: &CheckArgs, receipt_path: &Path) -> Result<
                 (outcome, info, None)
             }
             Err(error) => {
-                let outcome = ObligationsOutcome {
-                    results: vec![],
-                    note: Some(format!("invalid receipt: {error}")),
-                    advisory: Default::default(),
-                };
+                let outcome = ObligationsOutcome::with_note(format!("invalid receipt: {error}"));
                 let info = ReceiptInfo {
                     path: receipt_path.display().to_string(),
                     sha256: error.sha256().map(str::to_string),
@@ -384,7 +507,7 @@ fn run_receipt_mode(ctx: &Ctx, args: &CheckArgs, receipt_path: &Path) -> Result<
         };
 
     let mut enforcement_failures =
-        classify_enforcement_failures_receipt(&obligations, &ratification);
+        classify_enforcement_failures_receipt(&obligations, ratification);
     if let Some(detail) = invalid_receipt_detail {
         enforcement_failures.insert(
             0,
@@ -407,8 +530,7 @@ fn run_receipt_mode(ctx: &Ctx, args: &CheckArgs, receipt_path: &Path) -> Result<
             &[],
             0,
             true,
-            &obligations.results,
-            obligations.note.as_deref(),
+            obligations.report(selection),
             &enforcement_failures,
             Some(&receipt_info),
         );
@@ -429,8 +551,7 @@ fn run_receipt_mode(ctx: &Ctx, args: &CheckArgs, receipt_path: &Path) -> Result<
         &[],
         exit_code,
         false,
-        &obligations.results,
-        obligations.note.as_deref(),
+        obligations.report(selection),
         &enforcement_failures,
         Some(&receipt_info),
     );

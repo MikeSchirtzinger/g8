@@ -38,6 +38,7 @@ toml.workspace        = true
 notify.workspace      = true
 chrono.workspace      = true
 rusqlite.workspace    = true
+globset               = "0.4"
 
 [target.'cfg(unix)'.dependencies]
 # SIGPIPE reset in main.rs; already in the tree via rusqlite.

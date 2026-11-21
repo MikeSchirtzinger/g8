@@ -150,7 +150,7 @@ pub struct InitArgs {
     #[arg(long)]
     pub enforce: bool,
 
-    /// Install .git/hooks/pre-commit calling `g8 check`
+    /// Install a Git pre-commit hook that runs `g8 check` when g8.lock exists
     #[arg(long)]
     pub install_pre_commit: bool,
 
@@ -370,6 +370,10 @@ pub struct CheckArgs {
     /// Check just this project (default: all)
     #[arg(long, value_name = "NAME")]
     pub project: Option<String>,
+
+    /// Run only obligations matching these IDs or globs
+    #[arg(long, value_name = "PATTERN", num_args = 1..)]
+    pub only: Vec<String>,
 
     /// Check an action receipt instead of the repository — the pre-act gate
     /// for standing agents. Only

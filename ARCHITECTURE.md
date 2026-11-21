@@ -1480,7 +1480,7 @@ SUBCOMMANDS
 
   init                        Initialize g8 in the current directory
     --enforce                 Set enforcement = on (default: off; AUDIT-before-enforce)
-    --install-pre-commit      Install .git/hooks/pre-commit calling `g8 check`
+    --install-pre-commit      Install a Git pre-commit hook that checks worktrees with g8.lock
     --no-claude-import        Don't touch CLAUDE.md
     --no-subagents            Don't drop .claude/agents/*.md
     --name <STR>              Space name (default: directory basename)
@@ -1522,6 +1522,7 @@ SUBCOMMANDS
     --json                    Equivalent to --output json
     --strict                  Fail on warnings as well as errors
     --project <NAME>          Check just this project (default: all)
+    --only <PATTERN>...       Select obligations by ID or glob
 
   merge --from <PATH>         Cross-space conflict detection
     --from <PATH>             Path to remote space root (must contain .g8/)

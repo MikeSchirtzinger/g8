@@ -75,10 +75,15 @@ cd my-project
 g8 init --install-pre-commit
 ```
 
-This creates `.g8/config.toml` and `.g8/store.db`, and installs a
-`.git/hooks/pre-commit` that runs `g8 check`. Enforcement starts **off** so you
-can audit before you gate. `.g8/store.db` is ignored by git; commit
-`.g8/config.toml`.
+This creates `.g8/config.toml` and `.g8/store.db` and installs a pre-commit
+hook in the directory Git resolves, including when `core.hooksPath` is set.
+Git shares the default hooks directory between linked worktrees. The hook
+runs `g8 check` only when the worktree being committed has a top-level
+`g8.lock`. Installation preserves hooks managed by someone else and returns
+a nonzero exit code when it cannot install the hook.
+
+Enforcement starts **off** so you can audit before you gate. Git ignores
+`.g8/store.db`. Commit `.g8/config.toml`.
 
 ### 2. Write your first obligations
 
@@ -209,6 +214,20 @@ g8 init --enforce         # make it the default in .g8/config.toml
 
 Exit codes: `0` clean (or enforcement off), `1` a gate failed, `2` internal
 error. `g8 check --json` emits the same result as a stable JSON payload.
+
+To run a subset of obligations, pass one or more case-sensitive IDs or globs:
+
+```bash
+g8 check --enforce --only 'SC-M1-*' SC-PROTO-01
+```
+
+Each pattern must match an obligation or the command exits 2. Overlapping
+patterns select each matching obligation once. Pairing and ratification still
+check the repository, including changes to the full obligations specification.
+Human output shows the selection counts and labels a narrowed enforced check
+as a partial run. JSON includes `obligation_selection` with `patterns`,
+`selected` and `not_selected`. Repository-mode counts include any receipt
+placeholders. With `--receipt`, selection applies to receipt-wired obligations.
 
 GitHub Actions:
 
