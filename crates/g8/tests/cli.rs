@@ -320,6 +320,236 @@ fn test_status_no_regen() {
 
 // ── check ─────────────────────────────────────────────────────────────────────
 
+fn write_obligations(root: &std::path::Path, spec: &str) -> PathBuf {
+    let path = root.join("specs/obligations-v0.1.json");
+    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+    std::fs::write(&path, spec).unwrap();
+    path
+}
+
+const SELECTION_SPEC: &str = r#"{
+  "obligations": [
+    {"id":"SC-M1-01","signal":{"advisory":true}},
+    {"id":"SC-M1-02","signal":{"advisory":true}},
+    {"id":"SC-PROTO-01","signal":{"advisory":true}},
+    {"id":"SC-OTHER-01","checker":{"mode":"typed","checks":[
+      {"backend":"cargo_metadata_no_dep","args":{"denied":[],"scope_crates":[],"build_config":"default"}}
+    ]}},
+    {"id":"RECEIPT-01","signal":{"wiring":"action_receipt","advisory":true}},
+    {"id":"RECEIPT-02","signal":{"wiring":"action_receipt","advisory":true}}
+  ]
+}"#;
+
+fn ratify_selection_spec(root: &std::path::Path) -> PathBuf {
+    let spec = write_obligations(root, SELECTION_SPEC);
+    g8().current_dir(root).arg("ratify").assert().success();
+    spec
+}
+
+#[cfg(unix)]
+#[test]
+fn test_check_only_skips_unselected_checkers() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let (_dir, root) = init_temp_project();
+    ratify_selection_spec(&root);
+
+    // The marker detects an actual subprocess launch, even if its result is discarded.
+    let tools = TempDir::new().unwrap();
+    let cargo = tools.path().join("cargo");
+    std::fs::write(&cargo, "#!/bin/sh\n: > ran-cargo\nexit 1\n").unwrap();
+    std::fs::set_permissions(cargo, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let path = std::env::join_paths(
+        std::iter::once(tools.path().to_path_buf())
+            .chain(std::env::split_paths(&std::env::var_os("PATH").unwrap())),
+    )
+    .unwrap();
+    let check = || {
+        let mut command = g8();
+        command
+            .current_dir(&root)
+            .env("PATH", &path)
+            .args(["check", "--enforce", "--json"]);
+        command
+    };
+
+    let partial = check()
+        .args(["--only", "SC-M1-*", "SC-PROTO-01", "SC-M1-01"])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains(
+            "3 obligation(s) selected, 3 not selected",
+        ))
+        .stderr(predicate::str::contains("partial run"));
+    let json: serde_json::Value = serde_json::from_slice(&partial.get_output().stdout).unwrap();
+    assert_eq!(
+        json["obligation_selection"],
+        serde_json::json!({
+            "patterns": ["SC-M1-*", "SC-PROTO-01", "SC-M1-01"],
+            "selected": 3,
+            "not_selected": 3,
+        })
+    );
+    let ids: Vec<_> = json["obligations"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|entry| entry["id"].as_str().unwrap())
+        .collect();
+    assert_eq!(ids, ["SC-M1-01", "SC-M1-02", "SC-PROTO-01"]);
+    assert!(!root.join("ran-cargo").exists());
+
+    check()
+        .args(["--only", "SC-OTHER-01", "NO-MATCH"])
+        .assert()
+        .code(2)
+        .stderr(predicate::str::contains("NO-MATCH"));
+    assert!(!root.join("ran-cargo").exists());
+
+    let full = check()
+        .assert()
+        .code(1)
+        .stderr(predicate::str::contains(
+            "6 obligation(s) selected, 0 not selected",
+        ))
+        .stderr(predicate::str::contains("partial run").not());
+    let json: serde_json::Value = serde_json::from_slice(&full.get_output().stdout).unwrap();
+    assert_eq!(
+        json["obligation_selection"],
+        serde_json::json!({"patterns":[],"selected":6,"not_selected":0})
+    );
+    assert!(root.join("ran-cargo").is_file());
+}
+
+#[test]
+fn test_check_only_rejects_unusable_patterns() {
+    let (_dir, root) = init_temp_project();
+    let check = |patterns: &[&str]| {
+        g8().current_dir(&root)
+            .args(["check", "--json", "--only"])
+            .args(patterns)
+            .assert()
+            .code(2)
+    };
+    check(&["ABSENT"]).stderr(predicate::str::contains("ABSENT"));
+    ratify_selection_spec(&root);
+    check(&[]).stderr(predicate::str::contains("--only"));
+    check(&["SC-M1-*", "["]).stderr(predicate::str::contains("invalid --only pattern"));
+    let unmatched =
+        check(&["SC-M1-*", "SC-MISSING"]).stderr(predicate::str::contains("SC-MISSING"));
+    let json: serde_json::Value = serde_json::from_slice(&unmatched.get_output().stdout).unwrap();
+    assert_eq!(json["exit_code"], 2);
+    assert_eq!(
+        json["obligation_selection"],
+        serde_json::json!({"patterns":["SC-M1-*","SC-MISSING"],"selected":0,"not_selected":6})
+    );
+}
+
+#[test]
+fn test_check_only_still_checks_whole_spec_and_lock() {
+    let (_dir, root) = init_temp_project();
+    let spec = ratify_selection_spec(&root);
+    let check = |detail| {
+        let result = g8()
+            .current_dir(&root)
+            .args(["check", "--enforce", "--json", "--only", "SC-M1-01"])
+            .assert()
+            .code(1)
+            .stderr(predicate::str::contains("partial run"))
+            .stderr(predicate::str::contains(detail));
+        let json: serde_json::Value = serde_json::from_slice(&result.get_output().stdout).unwrap();
+        assert_eq!(
+            json["enforcement_failures"][0]["classification"],
+            "unratified_spec_change"
+        );
+    };
+
+    let lock_path = root.join("g8.lock");
+    let original_lock = std::fs::read_to_string(&lock_path).unwrap();
+    std::fs::remove_file(&lock_path).unwrap();
+    check("g8.lock is missing");
+
+    std::fs::write(
+        &lock_path,
+        original_lock.replace("specs/obligations-v0.1.json", "other.json"),
+    )
+    .unwrap();
+    check("g8.lock pins other.json");
+
+    std::fs::write(lock_path, original_lock).unwrap();
+    std::fs::write(spec, SELECTION_SPEC.replace("SC-OTHER-01", "SC-OTHER-02")).unwrap();
+    check("changed after ratification");
+}
+
+#[test]
+fn test_check_only_selects_within_receipt_scope() {
+    let (_dir, root) = init_temp_project();
+    ratify_selection_spec(&root);
+    std::fs::write(root.join("receipt.json"), "{}").unwrap();
+    let check = |pattern| {
+        g8().current_dir(&root)
+            .args([
+                "check",
+                "--enforce",
+                "--json",
+                "--receipt",
+                "receipt.json",
+                "--only",
+                pattern,
+            ])
+            .assert()
+    };
+
+    let result = check("RECEIPT-01")
+        .success()
+        .stderr(predicate::str::contains(
+            "1 obligation(s) selected, 1 not selected",
+        ))
+        .stderr(predicate::str::contains("partial run"));
+    let json: serde_json::Value = serde_json::from_slice(&result.get_output().stdout).unwrap();
+    assert_eq!(json["obligations"].as_array().unwrap().len(), 1);
+    assert_eq!(json["obligations"][0]["id"], "RECEIPT-01");
+    check("SC-M1-01")
+        .code(2)
+        .stderr(predicate::str::contains("SC-M1-01"));
+}
+
+#[test]
+fn test_check_accepts_spec_ratified_by_v0_1_5() {
+    // The lock was generated by `g8 ratify` built from the v0.1.5 tag.
+    let (_dir, root) = init_temp_project();
+    write_obligations(
+        &root,
+        concat!(
+            r#"{"obligations":[{"id":"LEGACY-01","checker":{"mode":"typed","checks":[{"backend":"g8_check_contract","args":{"scenarios":["clean_store"]}}]}}]}"#,
+            "\n"
+        ),
+    );
+    let lock = concat!(
+        "{\n",
+        "  \"g8_version\": \"0.1.5\",\n",
+        "  \"spec_path\": \"specs/obligations-v0.1.json\",\n",
+        "  \"spec_sha256\": \"sha256:453e3686ff53450983786262feea1001a63ed5366378c9cedbf880504ba12cdd\"\n",
+        "}\n",
+    );
+    let lock_path = root.join("g8.lock");
+    std::fs::write(&lock_path, lock).unwrap();
+
+    for selection in [&[][..], &["--only", "LEGACY-01"][..]] {
+        let result = g8()
+            .current_dir(&root)
+            .args(["check", "--enforce", "--json"])
+            .args(selection)
+            .assert()
+            .success()
+            .stderr(predicate::str::contains("partial run").not());
+        let json: serde_json::Value = serde_json::from_slice(&result.get_output().stdout).unwrap();
+        assert_eq!(json["obligations"][0]["status"], "passed");
+        assert_eq!(json["enforcement_failures"], serde_json::json!([]));
+    }
+    assert_eq!(std::fs::read_to_string(lock_path).unwrap(), lock);
+}
+
 #[test]
 fn test_check_json_enforcement_disabled_emits_valid_json() {
     let (_dir, path) = init_temp_project();

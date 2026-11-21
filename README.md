@@ -210,6 +210,20 @@ g8 init --enforce         # make it the default in .g8/config.toml
 Exit codes: `0` clean (or enforcement off), `1` a gate failed, `2` internal
 error. `g8 check --json` emits the same result as a stable JSON payload.
 
+To run a subset of obligations, pass one or more case-sensitive IDs or globs:
+
+```bash
+g8 check --enforce --only 'SC-M1-*' SC-PROTO-01
+```
+
+Each pattern must match an obligation or the command exits 2. Overlapping
+patterns select each matching obligation once. Pairing and ratification still
+check the repository, including changes to the full obligations specification.
+Human output shows the selection counts and labels a narrowed enforced check
+as a partial run. JSON includes `obligation_selection` with `patterns`,
+`selected` and `not_selected`. Repository-mode counts include any receipt
+placeholders. With `--receipt`, selection applies to receipt-wired obligations.
+
 GitHub Actions:
 
 ```yaml

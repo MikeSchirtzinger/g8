@@ -1522,6 +1522,7 @@ SUBCOMMANDS
     --json                    Equivalent to --output json
     --strict                  Fail on warnings as well as errors
     --project <NAME>          Check just this project (default: all)
+    --only <PATTERN>...       Select obligations by ID or glob
 
   merge --from <PATH>         Cross-space conflict detection
     --from <PATH>             Path to remote space root (must contain .g8/)

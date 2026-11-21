@@ -371,6 +371,10 @@ pub struct CheckArgs {
     #[arg(long, value_name = "NAME")]
     pub project: Option<String>,
 
+    /// Run only obligations matching these IDs or globs
+    #[arg(long, value_name = "PATTERN", num_args = 1..)]
+    pub only: Vec<String>,
+
     /// Check an action receipt instead of the repository — the pre-act gate
     /// for standing agents. Only
     /// `action_receipt`-wired obligations run, against the parsed receipt;
