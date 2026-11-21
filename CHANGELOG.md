@@ -14,6 +14,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   checkers, and reports selection counts. Ratification still covers the
   entire specification (#29).
 
+### Fixed
+
+- `g8 init --install-pre-commit` resolves the hook directory through Git,
+  supports linked worktrees and `core.hooksPath`, and exits nonzero if
+  installation fails. The hook skips worktrees without a top-level
+  `g8.lock` and the installer preserves existing hooks from other tools
+  (#25).
+
 ## [0.1.5] - 2026-10-23
 
 ### Added

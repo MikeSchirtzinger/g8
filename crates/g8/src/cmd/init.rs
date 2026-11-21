@@ -12,7 +12,11 @@
 //!
 //! `g8 init --enforce` flips `.g8/config.toml::enforcement = "on"`.
 
-use anyhow::{Context, Result};
+use std::io::{ErrorKind, Write};
+use std::path::{Path, PathBuf};
+use std::process::Command;
+
+use anyhow::{bail, Context, Result};
 
 use g8_core::{now_millis, ConvergenceSpace, Project, ProjectId, SpaceId};
 use g8_store::{RusqliteStore, StoreConnection};
@@ -95,17 +99,11 @@ pub fn run(ctx: &Ctx, args: &InitArgs) -> Result<i32> {
         });
     }
 
-    // 7b. Install `.git/hooks/pre-commit` if requested.
+    // 7b. Install the Git pre-commit hook if requested.
     if args.install_pre_commit {
-        match install_pre_commit_hook(&root) {
-            Ok(path) => {
-                if !ctx.quiet {
-                    eprintln!("installed pre-commit hook at {}", path.display());
-                }
-            }
-            Err(e) => {
-                eprintln!("warn: could not install pre-commit hook: {e:#}");
-            }
+        let path = install_pre_commit_hook(&root).context("could not install pre-commit hook")?;
+        if !ctx.quiet {
+            eprintln!("installed pre-commit hook at {}", path.display());
         }
     }
 
@@ -281,6 +279,10 @@ const PRE_COMMIT_HOOK: &str = r#"#!/usr/bin/env sh
 # Installed by `g8 init --install-pre-commit`.
 # Fails the commit if the pairing gate finds errors. Skip with `--no-verify`.
 set -e
+# Git runs pre-commit from the root of the worktree being committed.
+if [ ! -f ./g8.lock ]; then
+    exit 0
+fi
 if ! command -v g8 >/dev/null 2>&1; then
     echo "g8 not on PATH: skipping pairing gate" >&2
     exit 0
@@ -288,38 +290,111 @@ fi
 exec g8 check --json >/dev/null
 "#;
 
-fn install_pre_commit_hook(root: &std::path::Path) -> Result<std::path::PathBuf> {
-    use anyhow::bail;
+const LEGACY_PRE_COMMIT_HOOK: &str = r#"#!/usr/bin/env sh
+# Installed by `g8 init --install-pre-commit`.
+# Fails the commit if the pairing gate finds errors. Skip with `--no-verify`.
+set -e
+if ! command -v g8 >/dev/null 2>&1; then
+    echo "g8 not on PATH: skipping pairing gate" >&2
+    exit 0
+fi
+exec g8 check --json >/dev/null
+"#;
 
-    let git_dir = root.join(".git");
-    if !git_dir.is_dir() {
-        bail!(
-            "no .git/ directory at {} (not a git repository)",
-            root.display()
-        );
-    }
-    let hooks_dir = git_dir.join("hooks");
-    std::fs::create_dir_all(&hooks_dir).context("creating .git/hooks/")?;
+fn install_pre_commit_hook(root: &Path) -> Result<PathBuf> {
+    let hooks_dir = git_hooks_dir(root)?;
+    std::fs::create_dir_all(&hooks_dir)
+        .with_context(|| format!("creating hooks directory {}", hooks_dir.display()))?;
     let path = hooks_dir.join("pre-commit");
-    if path.exists() {
-        bail!(
-            "{} already exists: remove it first if you want g8 to manage it",
-            path.display()
-        );
-    }
-    std::fs::write(&path, PRE_COMMIT_HOOK)
-        .with_context(|| format!("writing {}", path.display()))?;
-
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        let mut perms = std::fs::metadata(&path)?.permissions();
-        perms.set_mode(0o755);
-        std::fs::set_permissions(&path, perms)
-            .with_context(|| format!("chmod +x {}", path.display()))?;
+    match std::fs::symlink_metadata(&path) {
+        Err(error) if error.kind() == ErrorKind::NotFound => write_new_hook(&path)?,
+        Err(error) => return Err(error).with_context(|| format!("inspecting {}", path.display())),
+        Ok(metadata) => {
+            if !metadata.is_file() {
+                bail!("{} already exists and is not a g8 hook", path.display());
+            }
+            let bytes = std::fs::read(&path)
+                .with_context(|| format!("reading existing hook {}", path.display()))?;
+            if bytes != PRE_COMMIT_HOOK.as_bytes() && bytes != LEGACY_PRE_COMMIT_HOOK.as_bytes() {
+                bail!("{} already exists and is not a g8 hook", path.display());
+            }
+            if bytes == PRE_COMMIT_HOOK.as_bytes() {
+                let file = std::fs::File::open(&path)?;
+                make_executable(&file).with_context(|| format!("chmod +x {}", path.display()))?;
+            } else {
+                let temporary = hooks_dir.join(".g8-pre-commit.lock");
+                write_new_hook(&temporary)?;
+                if let Err(error) = std::fs::rename(&temporary, &path) {
+                    let _ = std::fs::remove_file(&temporary);
+                    return Err(error).with_context(|| format!("upgrading {}", path.display()));
+                }
+            }
+        }
     }
 
     Ok(path)
+}
+
+fn git_hooks_dir(root: &Path) -> Result<PathBuf> {
+    let output = Command::new("git")
+        .args(["rev-parse", "--path-format=absolute", "--git-path", "hooks"])
+        .current_dir(root)
+        .output()
+        .context("running git rev-parse --git-path hooks")?;
+    if !output.status.success() {
+        bail!(
+            "git rev-parse --git-path hooks failed in {}: {}",
+            root.display(),
+            String::from_utf8_lossy(&output.stderr).trim()
+        );
+    }
+    let bytes = output
+        .stdout
+        .strip_suffix(b"\n")
+        .filter(|path| !path.is_empty())
+        .context("git rev-parse --git-path hooks returned no path")?;
+
+    #[cfg(unix)]
+    use std::os::unix::ffi::OsStrExt;
+    #[cfg(unix)]
+    let path = Path::new(std::ffi::OsStr::from_bytes(bytes));
+    #[cfg(not(unix))]
+    let path = Path::new(std::str::from_utf8(
+        bytes.strip_suffix(b"\r").unwrap_or(bytes),
+    )?);
+
+    Ok(root.join(path))
+}
+
+fn write_new_hook(path: &Path) -> Result<()> {
+    let mut file = std::fs::File::create_new(path).with_context(|| {
+        format!(
+            "creating {} without overwriting existing files",
+            path.display()
+        )
+    })?;
+    let result = file
+        .write_all(PRE_COMMIT_HOOK.as_bytes())
+        .and_then(|()| make_executable(&file));
+    drop(file);
+    if let Err(error) = result {
+        let _ = std::fs::remove_file(path);
+        return Err(error).with_context(|| format!("writing executable hook {}", path.display()));
+    }
+    Ok(())
+}
+
+#[cfg(unix)]
+fn make_executable(file: &std::fs::File) -> std::io::Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+    let mut permissions = file.metadata()?.permissions();
+    permissions.set_mode(permissions.mode() | 0o111);
+    file.set_permissions(permissions)
+}
+
+#[cfg(not(unix))]
+fn make_executable(_file: &std::fs::File) -> std::io::Result<()> {
+    Ok(())
 }
 
 // ── Subagent definition ───────────────────────────────────────────────────────

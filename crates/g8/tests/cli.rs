@@ -177,6 +177,153 @@ fn test_init_json_output() {
         serde_json::from_str(&stdout).expect("init --output json should emit valid JSON");
 }
 
+fn git_in(root: &std::path::Path) -> Command {
+    let mut git = Command::new("git");
+    git.current_dir(root).args([
+        "-c",
+        "user.name=G8 Test",
+        "-c",
+        "user.email=g8@example.test",
+    ]);
+    git
+}
+
+fn init_with_hook(root: &std::path::Path) -> Command {
+    let mut command = g8();
+    command.current_dir(root).args([
+        "init",
+        "--no-claude-import",
+        "--no-subagents",
+        "--install-pre-commit",
+    ]);
+    command
+}
+
+#[cfg(unix)]
+#[test]
+fn test_init_installs_shared_hook_that_skips_worktree_without_lock() {
+    let dir = TempDir::new().unwrap();
+    let main = dir.path().join("main");
+    let linked = dir.path().join("linked");
+    std::fs::create_dir(&main).unwrap();
+    git_in(&main)
+        .args(["init", "-q", "--template="])
+        .assert()
+        .success();
+    git_in(&main)
+        .args(["commit", "-q", "--allow-empty", "-m", "initial"])
+        .assert()
+        .success();
+    git_in(&main)
+        .args(["worktree", "add", "-q", "-b", "linked"])
+        .arg(&linked)
+        .assert()
+        .success();
+
+    init_with_hook(&linked)
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("installed pre-commit hook"));
+    assert!(main.join(".git/hooks/pre-commit").is_file());
+    assert!(!main.join(".g8").exists());
+    assert!(!main.join("g8.lock").exists());
+    write_obligations(&linked, r#"{"obligations":[]}"#);
+    g8().current_dir(&linked).arg("ratify").assert().success();
+
+    let binary = assert_cmd::cargo::cargo_bin("g8");
+    let path = std::env::join_paths(
+        std::iter::once(binary.parent().unwrap().to_path_buf())
+            .chain(std::env::split_paths(&std::env::var_os("PATH").unwrap())),
+    )
+    .unwrap();
+    git_in(&linked)
+        .env("PATH", &path)
+        .args(["commit", "-q", "--allow-empty", "-m", "checked"])
+        .assert()
+        .success()
+        .stdout(predicate::str::is_empty())
+        .stderr(predicate::str::contains("all capabilities paired"));
+    git_in(&main)
+        .env("PATH", &path)
+        .args(["commit", "-q", "--allow-empty", "-m", "no lock"])
+        .assert()
+        .success()
+        .stdout(predicate::str::is_empty())
+        .stderr(predicate::str::is_empty());
+}
+
+#[test]
+fn test_init_hook_honors_hooks_path_and_preserves_foreign_hook() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    git_in(root)
+        .args(["init", "-q", "--template="])
+        .assert()
+        .success();
+    git_in(root)
+        .args(["config", "core.hooksPath", "custom hooks"])
+        .assert()
+        .success();
+
+    let hook = root.join("custom hooks/pre-commit");
+    std::fs::create_dir(hook.parent().unwrap()).unwrap();
+    let foreign = "#!/bin/sh\nexit 1\n";
+    std::fs::write(&hook, foreign).unwrap();
+    init_with_hook(root)
+        .assert()
+        .code(2)
+        .stderr(predicate::str::contains(
+            "already exists and is not a g8 hook",
+        ));
+    assert_eq!(std::fs::read_to_string(&hook).unwrap(), foreign);
+
+    std::fs::remove_file(&hook).unwrap();
+    init_with_hook(root).assert().success();
+    let installed = std::fs::read_to_string(&hook).unwrap();
+    assert!(installed.contains("if [ ! -f ./g8.lock ]; then"));
+    assert!(!root.join(".git/hooks/pre-commit").exists());
+    init_with_hook(root).assert().success();
+    assert_eq!(std::fs::read_to_string(&hook).unwrap(), installed);
+
+    // Restore the exact script written by older installers and upgrade it.
+    let legacy = installed.replace(
+        "# Git runs pre-commit from the root of the worktree being committed.\nif [ ! -f ./g8.lock ]; then\n    exit 0\nfi\n",
+        "",
+    );
+    std::fs::write(&hook, legacy).unwrap();
+    init_with_hook(root).assert().success();
+    assert_eq!(std::fs::read_to_string(&hook).unwrap(), installed);
+}
+
+#[test]
+fn test_init_hook_fails_outside_git_and_when_hooks_path_is_blocked() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    init_with_hook(root)
+        .assert()
+        .code(2)
+        .stderr(predicate::str::contains(
+            "could not install pre-commit hook",
+        ))
+        .stderr(predicate::str::contains(
+            "git rev-parse --git-path hooks failed",
+        ));
+
+    git_in(root)
+        .args(["init", "-q", "--template="])
+        .assert()
+        .success();
+    git_in(root)
+        .args(["config", "core.hooksPath", "blocked"])
+        .assert()
+        .success();
+    std::fs::write(root.join("blocked"), "not a directory").unwrap();
+    init_with_hook(root)
+        .assert()
+        .code(2)
+        .stderr(predicate::str::contains("creating hooks directory"));
+}
+
 // ── scan ──────────────────────────────────────────────────────────────────────
 
 #[test]

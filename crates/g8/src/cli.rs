@@ -150,7 +150,7 @@ pub struct InitArgs {
     #[arg(long)]
     pub enforce: bool,
 
-    /// Install .git/hooks/pre-commit calling `g8 check`
+    /// Install a Git pre-commit hook that runs `g8 check` when g8.lock exists
     #[arg(long)]
     pub install_pre_commit: bool,
 

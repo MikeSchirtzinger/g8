@@ -75,10 +75,15 @@ cd my-project
 g8 init --install-pre-commit
 ```
 
-This creates `.g8/config.toml` and `.g8/store.db`, and installs a
-`.git/hooks/pre-commit` that runs `g8 check`. Enforcement starts **off** so you
-can audit before you gate. `.g8/store.db` is ignored by git; commit
-`.g8/config.toml`.
+This creates `.g8/config.toml` and `.g8/store.db` and installs a pre-commit
+hook in the directory Git resolves, including when `core.hooksPath` is set.
+Git shares the default hooks directory between linked worktrees. The hook
+runs `g8 check` only when the worktree being committed has a top-level
+`g8.lock`. Installation preserves hooks managed by someone else and returns
+a nonzero exit code when it cannot install the hook.
+
+Enforcement starts **off** so you can audit before you gate. Git ignores
+`.g8/store.db`. Commit `.g8/config.toml`.
 
 ### 2. Write your first obligations
 
