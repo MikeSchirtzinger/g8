@@ -611,10 +611,7 @@ fn is_conditional(raw_text: &str, fields: &BTreeMap<String, AnnotationValue>) ->
         return true;
     }
     // Check raw text for cfg_attr / cfg preceding the annotation.
-    if raw_text.contains("#[cfg(") || raw_text.contains("#[cfg_attr(") {
-        return true;
-    }
-    false
+    raw_text.contains("#[cfg(") || raw_text.contains("#[cfg_attr(")
 }
 
 /// Returns `true` if the file path lives under a `tests`, `tests-*`, or `*-tests` directory.
