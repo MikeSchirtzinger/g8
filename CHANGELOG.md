@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.6] - 2026-11-21
+
 ### Added
 
 - `g8 check --only` selects obligations by ID or glob, skips excluded
@@ -273,5 +275,5 @@ the published `g8` crate; the library crates stayed at 0.1.0.
 This is the initial public release. The `g8-plan-draft` LLM integration crate
 and native Rust attribute extraction are deferred to v0.2.
 
-[Unreleased]: https://github.com/MikeSchirtzinger/g8/compare/v0.1.5...HEAD
+[Unreleased]: https://github.com/MikeSchirtzinger/g8/compare/v0.1.6...HEAD
 [0.1.0]: https://github.com/MikeSchirtzinger/g8/releases/tag/v0.1.0
